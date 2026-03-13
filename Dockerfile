@@ -28,14 +28,13 @@ RUN mkdir -p /var/log/resq && chown resq:resq /var/log/resq
 # Switch to non-root
 USER resq
 
-EXPOSE 8080
+# Railway uses dynamic PORT
+ENV PORT=8080
 
-# Health check
-HEALTHCHECK --interval=30s --timeout=10s --retries=3 \
-  CMD wget -qO- http://localhost:8080/actuator/health || exit 1
-
-ENTRYPOINT ["java", \
-  "-Xms256m", "-Xmx512m", \
-  "-Djava.security.egd=file:/dev/./urandom", \
-  "-Dspring.profiles.active=prod", \
-  "-jar", "app.jar"]
+# Shell form ENTRYPOINT — allows $PORT expansion
+ENTRYPOINT exec java \
+  -Xms256m -Xmx512m \
+  -Djava.security.egd=file:/dev/./urandom \
+  -Dspring.profiles.active=prod \
+  -Dserver.port=$PORT \
+  -jar app.jar

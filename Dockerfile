@@ -1,7 +1,5 @@
 # ═══════════════════════════════════════════════════
 # RESQ — Multi-stage Production Dockerfile
-# Stage 1: Build JAR with Maven
-# Stage 2: Run with minimal JRE Alpine image
 # ═══════════════════════════════════════════════════
 
 # ── Stage 1: Build ──
@@ -16,22 +14,16 @@ RUN mvn clean package -DskipTests -Pprod
 FROM eclipse-temurin:17-jre-alpine
 WORKDIR /app
 
-# Create non-root user
 RUN addgroup -S resq && adduser -S resq -G resq
 
-# Copy built JAR
-COPY --from=builder /app/target/*.jar app.jar
+# Copy the exact JAR (pom.xml finalName=app)
+COPY --from=builder /app/target/app.jar app.jar
 
-# Create log directory
 RUN mkdir -p /var/log/resq && chown resq:resq /var/log/resq
-
-# Switch to non-root
 USER resq
 
-# Railway uses dynamic PORT
 ENV PORT=8080
 
-# Shell form ENTRYPOINT — allows $PORT expansion
 ENTRYPOINT exec java \
   -Xms256m -Xmx512m \
   -Djava.security.egd=file:/dev/./urandom \

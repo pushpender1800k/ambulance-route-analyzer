@@ -43,7 +43,50 @@ public class DataSeeder implements CommandLineRunner {
         userRepository.save(new User("coordinator", passwordEncoder.encode("coord123"), Role.COORDINATOR));
         userRepository.save(new User("supervisor", passwordEncoder.encode("super123"), Role.SUPERVISOR));
 
-        System.out.println("✅ Seeded 4 users (admin/dispatcher/coordinator/supervisor)");
+        User driver1 = new User("driver1", passwordEncoder.encode("driver123"), Role.DRIVER);
+        driver1.setFullName("Ramesh Kumar");
+        driver1.setPhone("9876543210");
+        userRepository.save(driver1);
+
+        User driver2 = new User("driver2", passwordEncoder.encode("driver123"), Role.DRIVER);
+        driver2.setFullName("Suresh Singh");
+        driver2.setPhone("9876543211");
+        userRepository.save(driver2);
+
+        User driver3 = new User("driver3", passwordEncoder.encode("driver123"), Role.DRIVER);
+        driver3.setFullName("Vikram Yadav");
+        driver3.setPhone("9876543212");
+        userRepository.save(driver3);
+
+        User driver4 = new User("driver4", passwordEncoder.encode("driver123"), Role.DRIVER);
+        driver4.setFullName("Ajay Verma");
+        driver4.setPhone("9876543213");
+        userRepository.save(driver4);
+
+        User patient1 = new User("patient1", passwordEncoder.encode("patient123"), Role.PATIENT);
+        patient1.setFullName("John Doe");
+        patient1.setPhone("9988776655");
+        patient1.setEmail("john.doe@email.com");
+        patient1.setAddress("123 Sector 15, Noida");
+        patient1.setEmergencyContactName("Jane Doe");
+        patient1.setEmergencyContactPhone("9988776656");
+        patient1.setMedicalHistory("No known allergies");
+        patient1.setBloodType("O+");
+        patient1.setDateOfBirth("1985-06-15");
+        userRepository.save(patient1);
+
+        User patient2 = new User("patient2", passwordEncoder.encode("patient123"), Role.PATIENT);
+        patient2.setFullName("Priya Sharma");
+        patient2.setPhone("9988776657");
+        patient2.setEmail("priya.sharma@email.com");
+        patient2.setAddress("456 MG Road, Gurgaon");
+        patient2.setEmergencyContactName("Rahul Sharma");
+        patient2.setEmergencyContactPhone("9988776658");
+        patient2.setBloodType("A+");
+        patient2.setDateOfBirth("1990-03-22");
+        userRepository.save(patient2);
+
+        System.out.println("✅ Seeded 4 admin users + 4 drivers + 2 patients");
     }
 
     private void seedHospitals() {
@@ -63,23 +106,67 @@ public class DataSeeder implements CommandLineRunner {
     private void seedAmbulances() {
         if (ambulanceRepository.count() > 0) return;
 
-        ambulanceRepository.save(new Ambulance("ARIS-001", 28.6139, 77.2090, "STANDBY"));
-        ambulanceRepository.save(new Ambulance("ARIS-002", 28.5535, 77.2588, "STANDBY"));
-        ambulanceRepository.save(new Ambulance("ARIS-003", 28.6353, 77.2250, "ACTIVE"));
-        ambulanceRepository.save(new Ambulance("ARIS-004", 28.5245, 77.1855, "STANDBY"));
-        ambulanceRepository.save(new Ambulance("HELI-001", 28.5800, 77.2100, "STANDBY"));
+        Ambulance amb1 = new Ambulance("AMB-101", 28.5670, 77.2100);
+        amb1.setVehicleNumber("DL-01-AB-1234");
+        amb1.setVehicleModel("Mahindra Bolero");
+        amb1.setBaseLocation("AIIMS Campus");
+        amb1.setEquipmentLevel("Advanced Life Support");
+        ambulanceRepository.save(amb1);
 
-        System.out.println("✅ Seeded 5 units (4 ambulances + 1 helicopter)");
+        Ambulance amb2 = new Ambulance("AMB-102", 28.6200, 77.2500);
+        amb2.setVehicleNumber("DL-01-CD-5678");
+        amb2.setVehicleModel("Tata Winger");
+        amb2.setBaseLocation("Lajpat Nagar Station");
+        amb2.setEquipmentLevel("Basic Life Support");
+        ambulanceRepository.save(amb2);
+
+        Ambulance amb3 = new Ambulance("AMB-103", 28.5400, 77.2000);
+        amb3.setVehicleNumber("DL-01-EF-9012");
+        amb3.setVehicleModel("Force Traveller");
+        amb3.setBaseLocation("Nehru Place");
+        amb3.setEquipmentLevel("Advanced Life Support");
+        ambulanceRepository.save(amb3);
+
+        Ambulance amb4 = new Ambulance("AMB-104", 28.6500, 77.2800);
+        amb4.setVehicleNumber("DL-01-GH-3456");
+        amb4.setVehicleModel("Maruti Eeco");
+        amb4.setBaseLocation("Dwarka Sector 21");
+        amb4.setEquipmentLevel("Basic Life Support");
+        ambulanceRepository.save(amb4);
+
+        var users = userRepository.findAll();
+        for (var user : users) {
+            if (user.getRole() == Role.DRIVER && user.getAssignedAmbulanceId() == null) {
+                Ambulance amb = null;
+                if (user.getUsername().equals("driver1")) {
+                    amb = ambulanceRepository.findByUnitCode("AMB-101").orElse(null);
+                } else if (user.getUsername().equals("driver2")) {
+                    amb = ambulanceRepository.findByUnitCode("AMB-102").orElse(null);
+                } else if (user.getUsername().equals("driver3")) {
+                    amb = ambulanceRepository.findByUnitCode("AMB-103").orElse(null);
+                } else if (user.getUsername().equals("driver4")) {
+                    amb = ambulanceRepository.findByUnitCode("AMB-104").orElse(null);
+                }
+                
+                if (amb != null) {
+                    amb.setAssignedDriverId(user.getId());
+                    amb.setAssignedDriverName(user.getFullName());
+                    ambulanceRepository.save(amb);
+                    
+                    user.setAssignedAmbulanceId(amb.getId());
+                    userRepository.save(user);
+                }
+            }
+        }
+
+        System.out.println("✅ Seeded 4 ambulances with assigned drivers");
     }
 
     private void seedInitialEvents() {
         if (eventLogRepository.count() > 0) return;
 
-        eventLogRepository.save(new EventLog("SYSTEM", "🟢 ARIS v1.0 — System initialized successfully", "INFO"));
-        eventLogRepository.save(new EventLog("SYSTEM", "📡 All communication channels operational", "INFO"));
-        eventLogRepository.save(new EventLog("AI ROUTER", "🧠 Routing intelligence engine online", "INFO"));
-        eventLogRepository.save(new EventLog("SYSTEM", "🏥 7 hospitals connected to network", "INFO"));
-        eventLogRepository.save(new EventLog("SYSTEM", "🚑 5 emergency units registered and tracking", "INFO"));
+        eventLogRepository.save(new EventLog("SYSTEM", "ARIS Core Engine Online. All units initialized.", "INFO"));
+        eventLogRepository.save(new EventLog("DISPATCH", "Daily shift started. 5 units marked STANDBY.", "SYSTEM"));
 
         System.out.println("✅ Seeded initial event logs");
     }

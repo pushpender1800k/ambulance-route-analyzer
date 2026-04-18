@@ -1,6 +1,7 @@
 package com.aris.service;
 
 import com.aris.model.Ambulance;
+import com.aris.model.AmbulanceStatus;
 import com.aris.repository.AmbulanceRepository;
 import org.springframework.stereotype.Service;
 
@@ -25,7 +26,10 @@ public class AmbulanceService {
     }
 
     public long countDeployed() {
-        return ambulanceRepository.countByStatus("TRANSIT") + ambulanceRepository.countByStatus("ACTIVE");
+        return ambulanceRepository.countByStatus(AmbulanceStatus.TRANSIT_TO_PATIENT) + 
+               ambulanceRepository.countByStatus(AmbulanceStatus.TRANSIT_TO_HOSPITAL) +
+               ambulanceRepository.countByStatus(AmbulanceStatus.ON_SCENE) +
+               ambulanceRepository.countByStatus(AmbulanceStatus.AT_HOSPITAL);
     }
 
     public long countTotal() {

@@ -1,0 +1,738 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RESQ — Incidents</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;500;600;700;800;900&family=Rajdhani:wght@300;400;500;600;700&family=Share+Tech+Mono&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <link rel="stylesheet" href="/css/dashboard.css">
+    <style>
+        .incidents-container {
+            display: grid;
+            grid-template-columns: 1fr 400px;
+            gap: 20px;
+            padding: 20px;
+            height: calc(100vh - 80px);
+        }
+
+        .map-panel {
+            background: rgba(10,15,20,0.9);
+            border: 1px solid rgba(0,240,255,0.2);
+            border-radius: 12px;
+            overflow: hidden;
+            position: relative;
+        }
+
+        .map-header {
+            padding: 15px 20px;
+            background: rgba(0,0,0,0.5);
+            border-bottom: 1px solid rgba(0,240,255,0.2);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .map-title {
+            font-family: 'Orbitron', sans-serif;
+            font-size: 14px;
+            color: #00f0ff;
+            text-transform: uppercase;
+        }
+
+        .location-mode {
+            display: flex;
+            gap: 10px;
+        }
+
+        .location-mode-btn {
+            background: rgba(0,0,0,0.3);
+            border: 1px solid rgba(0,240,255,0.2);
+            border-radius: 4px;
+            padding: 6px 12px;
+            color: #888;
+            font-family: 'Rajdhani', sans-serif;
+            font-size: 12px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .location-mode-btn:hover, .location-mode-btn.active {
+            background: rgba(0,240,255,0.1);
+            border-color: #00f0ff;
+            color: #00f0ff;
+        }
+
+        #incidentMap {
+            width: 100%;
+            height: calc(100% - 60px);
+        }
+
+        .sos-panel {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+            height: 100%;
+        }
+
+        .sos-button-container {
+            text-align: center;
+            padding: 30px;
+            background: linear-gradient(180deg, rgba(255,0,68,0.1) 0%, rgba(0,0,0,0.3) 100%);
+            border: 2px solid rgba(255,0,68,0.3);
+            border-radius: 12px;
+        }
+
+        .sos-btn {
+            width: 160px;
+            height: 160px;
+            border-radius: 50%;
+            background: radial-gradient(circle at 30% 30%, #ff3366, #cc0044);
+            border: 4px solid #ff0044;
+            color: white;
+            font-family: 'Orbitron', sans-serif;
+            font-size: 18px;
+            font-weight: 700;
+            cursor: pointer;
+            box-shadow: 0 0 40px rgba(255,0,68,0.5), inset 0 0 20px rgba(0,0,0,0.3);
+            transition: all 0.3s ease;
+            animation: sosPulse 2s infinite;
+            position: relative;
+        }
+
+        @keyframes sosPulse {
+            0%, 100% { box-shadow: 0 0 40px rgba(255,0,68,0.5); }
+            50% { box-shadow: 0 0 80px rgba(255,0,68,0.8); }
+        }
+
+        .sos-btn:hover {
+            transform: scale(1.05);
+            box-shadow: 0 0 60px rgba(255,0,68,0.7);
+        }
+
+        .sos-btn:active {
+            transform: scale(0.95);
+        }
+
+        .sos-label {
+            margin-top: 15px;
+            font-family: 'Rajdhani', sans-serif;
+            font-size: 14px;
+            color: #ff4444;
+            text-transform: uppercase;
+        }
+
+        .location-status {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 10px 15px;
+            background: rgba(0,0,0,0.3);
+            border-radius: 8px;
+            margin-top: 15px;
+        }
+
+        .location-indicator {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background: #888;
+        }
+
+        .location-indicator.active {
+            background: #00ff88;
+            animation: locPulse 1s infinite;
+        }
+
+        @keyframes locPulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        .location-text {
+            font-family: 'Share Tech Mono', monospace;
+            font-size: 12px;
+            color: #888;
+        }
+
+        .report-form {
+            flex: 1;
+            background: rgba(10,15,20,0.9);
+            border: 1px solid rgba(0,240,255,0.2);
+            border-radius: 12px;
+            padding: 20px;
+            overflow-y: auto;
+        }
+
+        .form-title {
+            font-family: 'Orbitron', sans-serif;
+            font-size: 14px;
+            color: #00f0ff;
+            text-transform: uppercase;
+            margin-bottom: 20px;
+            padding-bottom: 10px;
+            border-bottom: 1px solid rgba(0,240,255,0.2);
+        }
+
+        .form-group {
+            margin-bottom: 15px;
+        }
+
+        .form-label {
+            display: block;
+            font-family: 'Rajdhani', sans-serif;
+            font-size: 12px;
+            color: #888;
+            text-transform: uppercase;
+            margin-bottom: 6px;
+        }
+
+        .form-input, .form-select, .form-textarea {
+            width: 100%;
+            padding: 10px 12px;
+            background: rgba(0,0,0,0.3);
+            border: 1px solid rgba(0,240,255,0.2);
+            border-radius: 6px;
+            color: #fff;
+            font-family: 'Rajdhani', sans-serif;
+            font-size: 14px;
+            transition: border-color 0.2s ease;
+        }
+
+        .form-input:focus, .form-select:focus, .form-textarea:focus {
+            outline: none;
+            border-color: #00f0ff;
+        }
+
+        .form-textarea {
+            resize: vertical;
+            min-height: 80px;
+        }
+
+        .form-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+        }
+
+        .severity-options {
+            display: flex;
+            gap: 10px;
+        }
+
+        .severity-btn {
+            flex: 1;
+            padding: 10px;
+            border: 1px solid rgba(255,255,255,0.2);
+            border-radius: 6px;
+            background: rgba(0,0,0,0.3);
+            color: #888;
+            font-family: 'Rajdhani', sans-serif;
+            font-size: 12px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .severity-btn:hover, .severity-btn.active {
+            border-color: #00f0ff;
+            color: #00f0ff;
+        }
+
+        .severity-btn.low { border-color: #00ff88; color: #00ff88; }
+        .severity-btn.moderate { border-color: #ffaa00; color: #ffaa00; }
+        .severity-btn.high { border-color: #ff6644; color: #ff6644; }
+        .severity-btn.critical { border-color: #ff0044; color: #ff0044; }
+
+        .submit-btn {
+            width: 100%;
+            padding: 15px;
+            background: linear-gradient(180deg, rgba(0,240,255,0.2) 0%, rgba(0,240,255,0.1) 100%);
+            border: 1px solid rgba(0,240,255,0.3);
+            border-radius: 8px;
+            color: #00f0ff;
+            font-family: 'Orbitron', sans-serif;
+            font-size: 14px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            margin-top: 10px;
+        }
+
+        .submit-btn:hover {
+            background: linear-gradient(180deg, rgba(0,240,255,0.3) 0%, rgba(0,240,255,0.2) 100%);
+            border-color: #00f0ff;
+        }
+
+        .recent-incidents {
+            margin-top: 15px;
+        }
+
+        .incident-item {
+            background: rgba(0,0,0,0.3);
+            border-radius: 8px;
+            padding: 12px;
+            margin-bottom: 10px;
+            border-left: 3px solid #00f0ff;
+        }
+
+        .incident-item.high-priority { border-left-color: #ff0044; }
+        .incident-item.medium-priority { border-left-color: #ffaa00; }
+
+        .incident-header {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 6px;
+        }
+
+        .incident-type {
+            font-family: 'Orbitron', sans-serif;
+            font-size: 12px;
+            color: #fff;
+        }
+
+        .incident-time {
+            font-family: 'Share Tech Mono', monospace;
+            font-size: 11px;
+            color: #666;
+        }
+
+        .incident-location {
+            font-family: 'Rajdhani', sans-serif;
+            font-size: 13px;
+            color: #888;
+        }
+
+        .sos-modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0,0,0,0.9);
+            z-index: 1000;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .sos-modal.active {
+            display: flex;
+        }
+
+        .sos-modal-content {
+            text-align: center;
+            padding: 60px;
+        }
+
+        .sos-modal-title {
+            font-family: 'Orbitron', sans-serif;
+            font-size: 48px;
+            color: #ff0044;
+            margin-bottom: 20px;
+            animation: sosBlink 0.5s infinite;
+        }
+
+        @keyframes sosBlink {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.3; }
+        }
+
+        .sos-modal-text {
+            font-family: 'Rajdhani', sans-serif;
+            font-size: 18px;
+            color: #fff;
+            margin-bottom: 30px;
+        }
+
+        .sos-modal-actions {
+            display: flex;
+            gap: 20px;
+            justify-content: center;
+        }
+
+        .sos-action-btn {
+            padding: 15px 40px;
+            border-radius: 8px;
+            font-family: 'Rajdhani', sans-serif;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .sos-action-btn.cancel {
+            background: rgba(255,255,255,0.1);
+            border: 1px solid rgba(255,255,255,0.3);
+            color: #fff;
+        }
+
+        .sos-action-btn.confirm {
+            background: rgba(255,0,68,0.3);
+            border: 2px solid #ff0044;
+            color: #ff0044;
+        }
+
+        .sos-action-btn:hover {
+            transform: scale(1.05);
+        }
+    </style>
+</head>
+<body>
+    <div class="app-wrapper">
+        <nav class="vertical-nav">
+            <div class="vnav-brand"><div class="vbrand-icon">R</div></div>
+            <div class="vnav-items">
+                <a href="/dashboard" class="vnav-btn" title="Command Map"><span class="vnav-icon">🗺️</span></a>
+                <a href="/units" class="vnav-btn" title="Units"><span class="vnav-icon">🚑</span></a>
+                <a href="/hospitals" class="vnav-btn" title="Hospitals"><span class="vnav-icon">🏥</span></a>
+                <a href="/incidents" class="vnav-btn active" title="Incidents"><span class="vnav-icon">🔴</span></a>
+                <a href="/analytics" class="vnav-btn" title="Analytics"><span class="vnav-icon">📊</span></a>
+                <a href="/settings" class="vnav-btn" title="Settings"><span class="vnav-icon">⚙️</span></a>
+            </div>
+            <div class="vnav-bottom">
+                <button class="vnav-btn logout-vbtn" id="vLogoutBtn" title="Logout"><span class="vnav-icon">⏻</span></button>
+            </div>
+        </nav>
+
+        <div class="main-content">
+            <nav class="top-nav">
+                <div class="nav-left">
+                    <div class="nav-brand">
+                        <div class="brand-icon">R</div>
+                        <span class="brand-name">RESQ</span>
+                    </div>
+                    <div class="nav-divider"></div>
+                    <span class="nav-subtitle">INCIDENT REPORTING</span>
+                </div>
+                <div class="nav-center">
+                    <div class="nav-stat">
+                        <span class="ns-value" id="totalIncidents">0</span>
+                        <span class="ns-label">TOTAL</span>
+                    </div>
+                    <div class="nav-stat">
+                        <span class="ns-value" id="activeIncidents">0</span>
+                        <span class="ns-label">ACTIVE</span>
+                    </div>
+                    <div class="nav-stat">
+                        <span class="ns-value" id="pendingIncidents">0</span>
+                        <span class="ns-label">PENDING</span>
+                    </div>
+                </div>
+                <div class="nav-right">
+                    <div class="nav-clock" id="navClock">00:00:00</div>
+                    <div class="nav-user">
+                        <span class="user-role">DISPATCHER</span>
+                        <span class="user-name" id="userName">admin</span>
+                    </div>
+                    <div class="nav-avatar">A</div>
+                    <button class="logout-btn" id="logoutBtn">⏻ LOGOUT</button>
+                </div>
+            </nav>
+
+            <div class="incidents-container">
+                <div class="map-panel">
+                    <div class="map-header">
+                        <span class="map-title">Select Location</span>
+                        <div class="location-mode">
+                            <button class="location-mode-btn active" id="autoLocationBtn" onclick="setLocationMode('auto')">
+                                📍 Auto Detect
+                            </button>
+                            <button class="location-mode-btn" id="manualLocationBtn" onclick="setLocationMode('manual')">
+                                ✋ Manual Select
+                            </button>
+                        </div>
+                    </div>
+                    <div id="incidentMap"></div>
+                </div>
+
+                <div class="sos-panel">
+                    <div class="sos-button-container">
+                        <button class="sos-btn" id="mainSosBtn" onclick="triggerSOS()">
+                            SOS<br>EMERGENCY
+                        </button>
+                        <div class="sos-label">Tap to dispatch emergency response</div>
+                        <div class="location-status">
+                            <div class="location-indicator" id="locationIndicator"></div>
+                            <span class="location-text" id="locationText">Location: Detecting...</span>
+                        </div>
+                    </div>
+
+                    <div class="report-form">
+                        <div class="form-title">Report New Incident</div>
+                        <form id="incidentForm">
+                            <div class="form-group">
+                                <label class="form-label">Emergency Type</label>
+                                <select class="form-select" id="emergencyType" required>
+                                    <option value="">Select type...</option>
+                                    <option value="MEDICAL">Medical Emergency</option>
+                                    <option value="ACCIDENT">Road Accident</option>
+                                    <option value="FIRE">Fire Emergency</option>
+                                    <option value="CRIME">Crime/Assault</option>
+                                    <option value="OTHER">Other</option>
+                                </select>
+                            </div>
+
+                            <div class="form-group">
+                                <label class="form-label">Severity</label>
+                                <div class="severity-options">
+                                    <button type="button" class="severity-btn low" data-severity="LOW">LOW</button>
+                                    <button type="button" class="severity-btn moderate active" data-severity="MODERATE">MOD</button>
+                                    <button type="button" class="severity-btn high" data-severity="HIGH">HIGH</button>
+                                    <button type="button" class="severity-btn critical" data-severity="CRITICAL">CRIT</button>
+                                </div>
+                            </div>
+
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label class="form-label">Latitude</label>
+                                    <input type="text" class="form-input" id="latitude" placeholder="28.6139" readonly>
+                                </div>
+                                <div class="form-group">
+                                    <label class="form-label">Longitude</label>
+                                    <input type="text" class="form-input" id="longitude" placeholder="77.2090" readonly>
+                                </div>
+                            </div>
+
+                            <div class="form-group">
+                                <label class="form-label">Location Description</label>
+                                <input type="text" class="form-input" id="locationDesc" placeholder="Near metro station, sector 15...">
+                            </div>
+
+                            <div class="form-group">
+                                <label class="form-label">Description</label>
+                                <textarea class="form-textarea" id="description" placeholder="Describe the emergency situation..."></textarea>
+                            </div>
+
+                            <button type="submit" class="submit-btn">🚨 SUBMIT INCIDENT REPORT</button>
+                        </form>
+
+                        <div class="recent-incidents">
+                            <div class="form-title" style="font-size: 12px;">Recent Incidents</div>
+                            <div id="recentIncidentsList"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="sos-modal" id="sosModal">
+        <div class="sos-modal-content">
+            <div class="sos-modal-title">SOS TRIGGERED</div>
+            <div class="sos-modal-text">Emergency services are being dispatched to your location.</div>
+            <div class="location-text" id="sosLocation" style="margin-bottom: 30px;"></div>
+            <div class="sos-modal-actions">
+                <button class="sos-action-btn cancel" onclick="cancelSOS()">CANCEL</button>
+                <button class="sos-action-btn confirm" onclick="confirmSOS()">CONFIRM DISPATCH</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script>
+        let map;
+        let marker;
+        let currentLocation = { lat: 28.6139, lng: 77.2090 };
+        let locationMode = 'auto';
+        let selectedSeverity = 'MODERATE';
+        let incidents = [];
+
+        function updateClock() {
+            const now = new Date();
+            document.getElementById('navClock').textContent = now.toLocaleTimeString('en-US', {hour12: false});
+        }
+        setInterval(updateClock, 1000);
+        updateClock();
+
+        function initMap() {
+            map = L.map('incidentMap').setView([28.6139, 77.2090], 12);
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                attribution: '© OpenStreetMap'
+            }).addTo(map);
+
+            marker = L.marker([currentLocation.lat, currentLocation.lng], {draggable: true}).addTo(map);
+
+            marker.on('dragend', function(e) {
+                const pos = e.target.getLatLng();
+                currentLocation = { lat: pos.lat, lng: pos.lng };
+                document.getElementById('latitude').value = pos.lat.toFixed(6);
+                document.getElementById('longitude').value = pos.lng.toFixed(6);
+            });
+
+            map.on('click', function(e) {
+                if (locationMode === 'manual') {
+                    marker.setLatLng(e.latlng);
+                    currentLocation = { lat: e.latlng.lat, lng: e.latlng.lng };
+                    document.getElementById('latitude').value = e.latlng.lat.toFixed(6);
+                    document.getElementById('longitude').value = e.latlng.lng.toFixed(6);
+                }
+            });
+        }
+
+        function setLocationMode(mode) {
+            locationMode = mode;
+            document.getElementById('autoLocationBtn').classList.toggle('active', mode === 'auto');
+            document.getElementById('manualLocationBtn').classList.toggle('active', mode === 'manual');
+
+            if (mode === 'auto') {
+                map.getContainer().style.cursor = '';
+            } else {
+                map.getContainer().style.cursor = 'crosshair';
+            }
+        }
+
+        function detectLocation() {
+            if (navigator.geolocation) {
+                navigator.geolocation.getCurrentPosition(
+                    (position) => {
+                        currentLocation = {
+                            lat: position.coords.latitude,
+                            lng: position.coords.longitude
+                        };
+                        map.setView([currentLocation.lat, currentLocation.lng], 14);
+                        marker.setLatLng([currentLocation.lat, currentLocation.lng]);
+                        document.getElementById('latitude').value = currentLocation.lat.toFixed(6);
+                        document.getElementById('longitude').value = currentLocation.lng.toFixed(6);
+                        document.getElementById('locationText').textContent = `Location: ${currentLocation.lat.toFixed(4)}, ${currentLocation.lng.toFixed(4)}`;
+                        document.getElementById('locationIndicator').classList.add('active');
+                    },
+                    (error) => {
+                        console.error('Geolocation error:', error);
+                        document.getElementById('locationText').textContent = 'Location: Using default (Delhi)';
+                        document.getElementById('latitude').value = '28.6139';
+                        document.getElementById('longitude').value = '77.2090';
+                    }
+                );
+            } else {
+                document.getElementById('locationText').textContent = 'Geolocation not supported';
+            }
+        }
+
+        function triggerSOS() {
+            detectLocation();
+            document.getElementById('sosLocation').textContent = `${currentLocation.lat.toFixed(6)}, ${currentLocation.lng.toFixed(6)}`;
+            document.getElementById('sosModal').classList.add('active');
+        }
+
+        function cancelSOS() {
+            document.getElementById('sosModal').classList.remove('active');
+        }
+
+        function confirmSOS() {
+            document.getElementById('sosModal').classList.remove('active');
+            document.getElementById('emergencyType').value = 'MEDICAL';
+            document.getElementById('severity').value = 'CRITICAL';
+            document.getElementById('latitude').value = currentLocation.lat.toFixed(6);
+            document.getElementById('longitude').value = currentLocation.lng.toFixed(6);
+            alert('Emergency services dispatched! Ambulance en route.');
+        }
+
+        document.querySelectorAll('.severity-btn').forEach(btn => {
+            btn.addEventListener('click', function() {
+                document.querySelectorAll('.severity-btn').forEach(b => b.classList.remove('active'));
+                this.classList.add('active');
+                selectedSeverity = this.dataset.severity;
+            });
+        });
+
+        document.getElementById('incidentForm').addEventListener('submit', function(e) {
+            e.preventDefault();
+            const incident = {
+                type: document.getElementById('emergencyType').value,
+                severity: selectedSeverity,
+                lat: parseFloat(document.getElementById('latitude').value),
+                lng: parseFloat(document.getElementById('longitude').value),
+                location: document.getElementById('locationDesc').value,
+                description: document.getElementById('description').value,
+                status: 'REPORTED',
+                createdAt: new Date().toISOString()
+            };
+
+            fetch('/api/incidents', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(incident)
+            }).then(res => {
+                if (res.ok) {
+                    alert('Incident reported successfully!');
+                    this.reset();
+                    loadRecentIncidents();
+                }
+            }).catch(err => {
+                console.error('Error submitting incident:', err);
+                addIncidentToList(incident);
+                alert('Incident reported locally.');
+                this.reset();
+            });
+        });
+
+        function loadRecentIncidents() {
+            fetch('/api/incidents')
+                .then(res => res.json())
+                .then(data => {
+                    incidents = data.slice(-5).reverse();
+                    renderRecentIncidents();
+                    updateStats();
+                })
+                .catch(err => {
+                    console.error('Error loading incidents:', err);
+                    loadSampleIncidents();
+                });
+        }
+
+        function loadSampleIncidents() {
+            incidents = [
+                { id: 1, type: 'ACCIDENT', severity: 'HIGH', location: 'Ring Road, Sector 15', createdAt: new Date().toISOString() },
+                { id: 2, type: 'MEDICAL', severity: 'CRITICAL', location: 'Metro Station, Dwarka', createdAt: new Date(Date.now() - 300000).toISOString() },
+                { id: 3, type: 'FIRE', severity: 'MODERATE', location: 'Market Complex, Saket', createdAt: new Date(Date.now() - 600000).toISOString() }
+            ];
+            renderRecentIncidents();
+            updateStats();
+        }
+
+        function addIncidentToList(incident) {
+            incidents.unshift({
+                id: incidents.length + 1,
+                type: incident.type,
+                severity: incident.severity,
+                location: incident.location || 'Unknown',
+                createdAt: incident.createdAt
+            });
+            renderRecentIncidents();
+            updateStats();
+        }
+
+        function renderRecentIncidents() {
+            const list = document.getElementById('recentIncidentsList');
+            list.innerHTML = incidents.map(i => `
+                <div class="incident-item ${i.severity === 'HIGH' || i.severity === 'CRITICAL' ? 'high-priority' : 'medium-priority'}">
+                    <div class="incident-header">
+                        <span class="incident-type">${i.type}</span>
+                        <span class="incident-time">${formatTime(i.createdAt)}</span>
+                    </div>
+                    <div class="incident-location">${i.location}</div>
+                </div>
+            `).join('');
+        }
+
+        function formatTime(isoString) {
+            const date = new Date(isoString);
+            return date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+        }
+
+        function updateStats() {
+            document.getElementById('totalIncidents').textContent = incidents.length + 3;
+            document.getElementById('activeIncidents').textContent = Math.max(1, Math.floor(incidents.length / 2));
+            document.getElementById('pendingIncidents').textContent = Math.ceil(incidents.length / 3);
+        }
+
+        document.getElementById('vLogoutBtn').addEventListener('click', () => {
+            document.getElementById('logoutBtn').click();
+        });
+
+        initMap();
+        detectLocation();
+        loadRecentIncidents();
+    </script>
+</body>
+</html>

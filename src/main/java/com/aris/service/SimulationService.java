@@ -2,9 +2,11 @@ package com.aris.service;
 
 import com.aris.dto.RouteResponse;
 import com.aris.model.Ambulance;
+import com.aris.model.AmbulanceStatus;
 import com.aris.model.Dispatch;
 import com.aris.model.Hospital;
 import com.aris.model.Incident;
+import com.aris.model.IncidentStatus;
 import com.aris.repository.AmbulanceRepository;
 import com.aris.repository.DispatchRepository;
 import com.aris.repository.HospitalRepository;
@@ -33,7 +35,7 @@ public class SimulationService {
     // Current waypoint index per ambulance
     private final Map<Long, Integer> waypointIndex = new ConcurrentHashMap<>();
     // Track which phase the route was cached for
-    private final Map<Long, String> routePhase = new ConcurrentHashMap<>();
+    private final Map<Long, IncidentStatus> routePhase = new ConcurrentHashMap<>();
     // Steps per tick (calculated from ETA) per ambulance
     private final Map<Long, Integer> stepsPerTick = new ConcurrentHashMap<>();
 
@@ -63,13 +65,13 @@ public class SimulationService {
      * on time (accelerated by SPEED_MULTIPLIER for simulation).
      *
      * Phase tracking via incident status:
-     *   ACTIVE       → heading TO incident scene
-     *   IN_TRANSPORT → picked up patient, heading TO hospital
-     *   RESOLVED     → patient delivered, back to STANDBY
+     *   ASSIGNED       → heading TO incident scene
+     *   IN_PROGRESS    → picked up patient, heading TO hospital
+     *   RESOLVED       → patient delivered, back to STANDBY
      */
     @Scheduled(fixedRate = 2000)
     public void moveTransitAmbulances() {
-        List<Ambulance> transitUnits = ambulanceRepository.findByStatus("TRANSIT");
+        List<Ambulance> transitUnits = ambulanceRepository.findByStatus(AmbulanceStatus.TRANSIT_TO_PATIENT);
 
         for (Ambulance amb : transitUnits) {
             try {
@@ -80,60 +82,124 @@ public class SimulationService {
                 Optional<Incident> incOpt = incidentRepository.findById(latest.getIncidentId());
                 Optional<Hospital> hospOpt = hospitalRepository.findById(latest.getHospitalId());
 
-                if (incOpt.isEmpty() || hospOpt.isEmpty()) continue;
+                if (incOpt.isEmpty()) continue;
 
                 Incident incident = incOpt.get();
-                Hospital hospital = hospOpt.get();
-                String phase = incident.getStatus();
+                IncidentStatus phase = incident.getStatus();
 
-                if ("ACTIVE".equals(phase)) {
-                    // ── PHASE 1: Follow road route to incident scene ──
+                if (phase == IncidentStatus.EN_ROUTE_PATIENT) {
                     ensureRouteLoaded(amb.getId(), phase,
                             amb.getLat(), amb.getLng(),
                             incident.getLat(), incident.getLng());
 
                     boolean arrived = advanceAlongRoute(amb);
 
+                    Long patientId = incident.getPatientUserId();
+
                     if (arrived) {
                         amb.setLat(incident.getLat());
                         amb.setLng(incident.getLng());
+                        
+                        // Transition to Hospital phase
+                        if (hospOpt.isPresent()) {
+                            Hospital h = hospOpt.get();
+                            amb.setStatus(AmbulanceStatus.TRANSIT_TO_HOSPITAL);
+                            amb.setDestinationLat(h.getLat());
+                            amb.setDestinationLng(h.getLng());
+                        } else {
+                            amb.setStatus(AmbulanceStatus.ON_SCENE);
+                        }
                         ambulanceRepository.save(amb);
 
-                        incident.setStatus("IN_TRANSPORT");
+                        incident.setStatus(IncidentStatus.PICKED_UP);
+                        incident.setPickedUpAt(java.time.LocalDateTime.now());
                         incidentRepository.save(incident);
                         clearRoute(amb.getId());
 
                         eventBroadcaster.broadcast("SYSTEM",
                                 String.format("📍 Unit %s reached incident scene — loading patient",
                                         amb.getUnitCode()), "INFO");
-                    }
 
-                } else if ("IN_TRANSPORT".equals(phase)) {
-                    // ── PHASE 2: Follow road route to hospital ──
-                    ensureRouteLoaded(amb.getId(), phase,
-                            amb.getLat(), amb.getLng(),
-                            hospital.getLat(), hospital.getLng());
-
-                    boolean arrived = advanceAlongRoute(amb);
-
-                    if (arrived) {
-                        amb.setLat(hospital.getLat());
-                        amb.setLng(hospital.getLng());
-                        amb.setStatus("STANDBY");
-                        amb.setAssignedIncidentId(null);
-                        ambulanceRepository.save(amb);
-
-                        incident.setStatus("RESOLVED");
-                        incidentRepository.save(incident);
-                        clearRoute(amb.getId());
-
-                        eventBroadcaster.broadcast("SYSTEM",
-                                String.format("✅ Unit %s arrived at %s — patient delivered",
-                                        amb.getUnitCode(), hospital.getName()), "INFO");
+                        eventBroadcaster.broadcastIncidentUpdate(
+                                incident.getId(), "PICKED_UP",
+                                amb.getId(), amb.getUnitCode(),
+                                latest.getHospitalId(), hospOpt.map(Hospital::getName).orElse(null),
+                                0
+                        );
+                    } else {
+                        int remainingWaypoints = routeCache.get(amb.getId()) != null ?
+                                routeCache.get(amb.getId()).size() - waypointIndex.getOrDefault(amb.getId(), 0) : 0;
+                        int eta = Math.max(1, (remainingWaypoints * stepsPerTick.getOrDefault(amb.getId(), 1)) / 30);
+                        eventBroadcaster.broadcastAmbulanceLocation(
+                                amb.getId(), amb.getLat(), amb.getLng(),
+                                amb.getStatus().name(), amb.getUnitCode(),
+                                eta, patientId
+                        );
                     }
                 }
             } catch (Exception e) {
-                // Skip this ambulance on error
+                System.err.println("Error moving ambulance " + amb.getUnitCode() + ": " + e.getMessage());
+                e.printStackTrace();
+            }
+        }
+
+        List<Ambulance> toHospitalUnits = ambulanceRepository.findByStatus(AmbulanceStatus.TRANSIT_TO_HOSPITAL);
+        for (Ambulance amb : toHospitalUnits) {
+            try {
+                List<Dispatch> dispatches = dispatchRepository.findByAmbulanceId(amb.getId());
+                if (dispatches.isEmpty()) continue;
+
+                Dispatch latest = dispatches.get(dispatches.size() - 1);
+                Optional<Hospital> hospOpt = hospitalRepository.findById(latest.getHospitalId());
+
+                if (hospOpt.isEmpty()) continue;
+                Hospital hospital = hospOpt.get();
+
+                Incident incident = amb.getCurrentIncident();
+                Long patientId = incident != null ? incident.getPatientUserId() : null;
+
+                ensureRouteLoaded(amb.getId(), IncidentStatus.EN_ROUTE_HOSPITAL,
+                        amb.getLat(), amb.getLng(),
+                        hospital.getLat(), hospital.getLng());
+
+                boolean arrived = advanceAlongRoute(amb);
+
+                if (arrived) {
+                    amb.setLat(hospital.getLat());
+                    amb.setLng(hospital.getLng());
+                    amb.setStatus(AmbulanceStatus.AT_HOSPITAL);
+                    ambulanceRepository.save(amb);
+
+                    if (incident != null) {
+                        incident.setStatus(IncidentStatus.ARRIVED_HOSPITAL);
+                        incident.setArrivedHospitalAt(java.time.LocalDateTime.now());
+                        incidentRepository.save(incident);
+
+                        eventBroadcaster.broadcastIncidentUpdate(
+                                incident.getId(), "ARRIVED_HOSPITAL",
+                                amb.getId(), amb.getUnitCode(),
+                                hospital.getId(), hospital.getName(),
+                                0
+                        );
+                    }
+                    clearRoute(amb.getId());
+
+                    eventBroadcaster.broadcast("SYSTEM",
+                            String.format("✅ Unit %s arrived at %s — patient delivered",
+                                    amb.getUnitCode(), hospital.getName()), "INFO");
+                } else {
+                    int remainingWaypoints = routeCache.get(amb.getId()) != null ?
+                            routeCache.get(amb.getId()).size() - waypointIndex.getOrDefault(amb.getId(), 0) : 0;
+                    int eta = Math.max(1, (remainingWaypoints * stepsPerTick.getOrDefault(amb.getId(), 1)) / 30);
+                    eventBroadcaster.broadcastAmbulanceLocation(
+                            amb.getId(), amb.getLat(), amb.getLng(),
+                            amb.getStatus().name(), amb.getUnitCode(),
+                            eta, patientId
+                    );
+                }
+            } catch (Exception e) {
+                System.err.println("Error moving ambulance " + amb.getUnitCode() + ": " + e.getMessage());
+                e.printStackTrace();
             }
         }
     }
@@ -142,11 +208,11 @@ public class SimulationService {
      * Load OSRM route if not already cached for this ambulance+phase.
      * Calculate waypoints-per-tick from the ETA to match displayed timing.
      */
-    private void ensureRouteLoaded(Long ambId, String phase,
+    private void ensureRouteLoaded(Long ambId, IncidentStatus phase,
                                     double fromLat, double fromLng,
                                     double toLat, double toLng) {
-        String cachedPhase = routePhase.get(ambId);
-        if (routeCache.containsKey(ambId) && phase.equals(cachedPhase)) {
+        IncidentStatus cachedPhase = routePhase.get(ambId);
+        if (routeCache.containsKey(ambId) && phase == cachedPhase) {
             return;
         }
 
@@ -207,16 +273,4 @@ public class SimulationService {
         stepsPerTick.remove(ambId);
     }
 
-    /**
-     * Every 10 seconds, gently drift STANDBY ambulances to simulate patrol.
-     */
-    @Scheduled(fixedRate = 10000)
-    public void patrolStandbyAmbulances() {
-        List<Ambulance> standby = ambulanceRepository.findByStatus("STANDBY");
-        for (Ambulance amb : standby) {
-            amb.setLat(amb.getLat() + (Math.random() - 0.5) * 0.001);
-            amb.setLng(amb.getLng() + (Math.random() - 0.5) * 0.001);
-            ambulanceRepository.save(amb);
-        }
-    }
 }

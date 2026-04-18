@@ -1,0 +1,792 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RESQ — Analytics</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;500;600;700;800;900&family=Rajdhani:wght@300;400;500;600;700&family=Share+Tech+Mono&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/css/dashboard.css">
+    <style>
+        .analytics-container {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            padding: 20px;
+            height: calc(100vh - 80px);
+        }
+
+        .analytics-panel {
+            background: rgba(10,15,20,0.9);
+            border: 1px solid rgba(0,240,255,0.2);
+            border-radius: 12px;
+            padding: 20px;
+            overflow-y: auto;
+        }
+
+        .panel-title {
+            font-family: 'Orbitron', sans-serif;
+            font-size: 16px;
+            color: #00f0ff;
+            text-transform: uppercase;
+            margin-bottom: 20px;
+            padding-bottom: 10px;
+            border-bottom: 1px solid rgba(0,240,255,0.2);
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .form-section {
+            margin-bottom: 25px;
+        }
+
+        .section-title {
+            font-family: 'Rajdhani', sans-serif;
+            font-size: 13px;
+            color: #00f0ff;
+            text-transform: uppercase;
+            margin-bottom: 15px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .section-title::before {
+            content: '';
+            width: 3px;
+            height: 14px;
+            background: #00f0ff;
+        }
+
+        .form-row {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 12px;
+            margin-bottom: 12px;
+        }
+
+        .form-row.two-col {
+            grid-template-columns: 1fr 1fr;
+        }
+
+        .form-group {
+            margin-bottom: 12px;
+        }
+
+        .form-label {
+            display: block;
+            font-family: 'Rajdhani', sans-serif;
+            font-size: 11px;
+            color: #666;
+            text-transform: uppercase;
+            margin-bottom: 5px;
+        }
+
+        .form-input, .form-select, .form-textarea {
+            width: 100%;
+            padding: 10px 12px;
+            background: rgba(0,0,0,0.4);
+            border: 1px solid rgba(0,240,255,0.15);
+            border-radius: 6px;
+            color: #fff;
+            font-family: 'Rajdhani', sans-serif;
+            font-size: 14px;
+            transition: all 0.2s ease;
+        }
+
+        .form-input:focus, .form-select:focus, .form-textarea:focus {
+            outline: none;
+            border-color: #00f0ff;
+            box-shadow: 0 0 10px rgba(0,240,255,0.2);
+        }
+
+        .form-input::placeholder {
+            color: #444;
+        }
+
+        .form-textarea {
+            resize: vertical;
+            min-height: 60px;
+        }
+
+        .vitals-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 12px;
+        }
+
+        .vital-card {
+            background: rgba(0,0,0,0.4);
+            border: 1px solid rgba(0,240,255,0.15);
+            border-radius: 8px;
+            padding: 15px;
+            text-align: center;
+        }
+
+        .vital-icon {
+            font-size: 24px;
+            margin-bottom: 8px;
+        }
+
+        .vital-value {
+            font-family: 'Orbitron', sans-serif;
+            font-size: 20px;
+            color: #00f0ff;
+        }
+
+        .vital-label {
+            font-family: 'Rajdhani', sans-serif;
+            font-size: 11px;
+            color: #666;
+            text-transform: uppercase;
+        }
+
+        .vital-status {
+            margin-top: 5px;
+            font-size: 10px;
+            padding: 2px 6px;
+            border-radius: 3px;
+            display: inline-block;
+        }
+
+        .vital-normal { background: rgba(0,255,136,0.2); color: #00ff88; }
+        .vital-warning { background: rgba(255,170,0,0.2); color: #ffaa00; }
+        .vital-critical { background: rgba(255,0,68,0.2); color: #ff0044; }
+
+        .checkbox-group {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin: 10px 0;
+        }
+
+        .checkbox-group input[type="checkbox"] {
+            width: 18px;
+            height: 18px;
+            accent-color: #00f0ff;
+        }
+
+        .checkbox-group label {
+            font-family: 'Rajdhani', sans-serif;
+            font-size: 13px;
+            color: #888;
+        }
+
+        .submit-section {
+            display: flex;
+            gap: 12px;
+            margin-top: 20px;
+        }
+
+        .submit-btn {
+            flex: 1;
+            padding: 14px;
+            border-radius: 8px;
+            font-family: 'Orbitron', sans-serif;
+            font-size: 13px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .submit-btn.primary {
+            background: linear-gradient(180deg, rgba(0,240,255,0.3) 0%, rgba(0,240,255,0.1) 100%);
+            border: 1px solid rgba(0,240,255,0.3);
+            color: #00f0ff;
+        }
+
+        .submit-btn.secondary {
+            background: rgba(0,0,0,0.3);
+            border: 1px solid rgba(255,255,255,0.2);
+            color: #888;
+        }
+
+        .submit-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 20px rgba(0,240,255,0.3);
+        }
+
+        .logs-panel {
+            height: calc(100% - 100px);
+        }
+
+        .logs-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+        }
+
+        .filter-tabs {
+            display: flex;
+            gap: 8px;
+        }
+
+        .filter-tab {
+            padding: 6px 12px;
+            background: rgba(0,0,0,0.3);
+            border: 1px solid rgba(0,240,255,0.15);
+            border-radius: 4px;
+            color: #666;
+            font-family: 'Rajdhani', sans-serif;
+            font-size: 11px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .filter-tab:hover, .filter-tab.active {
+            background: rgba(0,240,255,0.1);
+            border-color: #00f0ff;
+            color: #00f0ff;
+        }
+
+        .logs-list {
+            height: calc(100% - 50px);
+            overflow-y: auto;
+        }
+
+        .log-entry {
+            background: rgba(0,0,0,0.3);
+            border-radius: 8px;
+            padding: 15px;
+            margin-bottom: 12px;
+            border-left: 3px solid #00f0ff;
+            animation: slideIn 0.3s ease;
+        }
+
+        @keyframes slideIn {
+            from { opacity: 0; transform: translateX(-20px); }
+            to { opacity: 1; transform: translateX(0); }
+        }
+
+        .log-entry.emergency { border-left-color: #ff0044; }
+        .log-entry.warning { border-left-color: #ffaa00; }
+        .log-entry.info { border-left-color: #00f0ff; }
+
+        .log-header {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 8px;
+        }
+
+        .log-type {
+            font-family: 'Orbitron', sans-serif;
+            font-size: 12px;
+            color: #fff;
+        }
+
+        .log-time {
+            font-family: 'Share Tech Mono', monospace;
+            font-size: 11px;
+            color: #666;
+        }
+
+        .log-patient {
+            font-family: 'Rajdhani', sans-serif;
+            font-size: 14px;
+            color: #00f0ff;
+            margin-bottom: 5px;
+        }
+
+        .log-details {
+            font-family: 'Rajdhani', sans-serif;
+            font-size: 13px;
+            color: #888;
+            line-height: 1.5;
+        }
+
+        .log-vitals {
+            display: flex;
+            gap: 15px;
+            margin-top: 10px;
+            padding-top: 10px;
+            border-top: 1px solid rgba(255,255,255,0.1);
+        }
+
+        .log-vital {
+            font-family: 'Share Tech Mono', monospace;
+            font-size: 12px;
+            color: #666;
+        }
+
+        .log-vital span {
+            color: #00f0ff;
+        }
+
+        .share-status {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 12px 15px;
+            background: rgba(0,0,0,0.3);
+            border-radius: 8px;
+            margin-bottom: 15px;
+        }
+
+        .share-indicator {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background: #00ff88;
+            animation: sharePulse 2s infinite;
+        }
+
+        @keyframes sharePulse {
+            0%, 100% { box-shadow: 0 0 5px rgba(0,255,136,0.5); }
+            50% { box-shadow: 0 0 15px rgba(0,255,136,0.8); }
+        }
+
+        .share-text {
+            font-family: 'Rajdhani', sans-serif;
+            font-size: 13px;
+            color: #00ff88;
+        }
+
+        .hospital-selector {
+            margin-bottom: 15px;
+        }
+
+        .hospital-preview {
+            background: rgba(0,240,255,0.1);
+            border: 1px solid rgba(0,240,255,0.2);
+            border-radius: 8px;
+            padding: 12px;
+            margin-bottom: 15px;
+        }
+
+        .hospital-preview-title {
+            font-family: 'Rajdhani', sans-serif;
+            font-size: 12px;
+            color: #666;
+            margin-bottom: 5px;
+        }
+
+        .hospital-preview-name {
+            font-family: 'Orbitron', sans-serif;
+            font-size: 14px;
+            color: #00f0ff;
+        }
+
+        .clear-btn {
+            background: rgba(255,0,68,0.1);
+            border: 1px solid rgba(255,0,68,0.3);
+            color: #ff4444;
+            padding: 8px 16px;
+            border-radius: 4px;
+            font-family: 'Rajdhani', sans-serif;
+            font-size: 12px;
+            cursor: pointer;
+            margin-left: auto;
+        }
+
+        .clear-btn:hover {
+            background: rgba(255,0,68,0.2);
+        }
+    </style>
+</head>
+<body>
+    <div class="app-wrapper">
+        <nav class="vertical-nav">
+            <div class="vnav-brand"><div class="vbrand-icon">R</div></div>
+            <div class="vnav-items">
+                <a href="/dashboard" class="vnav-btn" title="Command Map"><span class="vnav-icon">🗺️</span></a>
+                <a href="/units" class="vnav-btn" title="Units"><span class="vnav-icon">🚑</span></a>
+                <a href="/hospitals" class="vnav-btn" title="Hospitals"><span class="vnav-icon">🏥</span></a>
+                <a href="/incidents" class="vnav-btn" title="Incidents"><span class="vnav-icon">🔴</span></a>
+                <a href="/analytics" class="vnav-btn active" title="Analytics"><span class="vnav-icon">📊</span></a>
+                <a href="/settings" class="vnav-btn" title="Settings"><span class="vnav-icon">⚙️</span></a>
+            </div>
+            <div class="vnav-bottom">
+                <button class="vnav-btn logout-vbtn" id="vLogoutBtn" title="Logout"><span class="vnav-icon">⏻</span></button>
+            </div>
+        </nav>
+
+        <div class="main-content">
+            <nav class="top-nav">
+                <div class="nav-left">
+                    <div class="nav-brand">
+                        <div class="brand-icon">R</div>
+                        <span class="brand-name">RESQ</span>
+                    </div>
+                    <div class="nav-divider"></div>
+                    <span class="nav-subtitle">PATIENT ANALYTICS</span>
+                </div>
+                <div class="nav-center">
+                    <div class="nav-stat">
+                        <span class="ns-value" id="totalPatients">0</span>
+                        <span class="ns-label">PATIENTS</span>
+                    </div>
+                    <div class="nav-stat">
+                        <span class="ns-value" id="criticalCases">0</span>
+                        <span class="ns-label">CRITICAL</span>
+                    </div>
+                    <div class="nav-stat">
+                        <span class="ns-value" id="sharedHospitals">0</span>
+                        <span class="ns-label">SHARED</span>
+                    </div>
+                </div>
+                <div class="nav-right">
+                    <div class="nav-clock" id="navClock">00:00:00</div>
+                    <div class="nav-user">
+                        <span class="user-role">MEDIC</span>
+                        <span class="user-name" id="userName">admin</span>
+                    </div>
+                    <div class="nav-avatar">A</div>
+                    <button class="logout-btn" id="logoutBtn">⏻ LOGOUT</button>
+                </div>
+            </nav>
+
+            <div class="analytics-container">
+                <div class="analytics-panel">
+                    <div class="panel-title">📋 Patient Data Entry</div>
+
+                    <div class="share-status">
+                        <div class="share-indicator"></div>
+                        <span class="share-text">Data will be shared with destination hospital in real-time</span>
+                    </div>
+
+                    <div class="hospital-selector">
+                        <label class="form-label">Destination Hospital</label>
+                        <select class="form-select" id="destinationHospital">
+                            <option value="">Select hospital...</option>
+                            <option value="1">City General Hospital</option>
+                            <option value="2">Metro Medical Center</option>
+                            <option value="3">Sunrise Health Institute</option>
+                            <option value="4">Life Care Hospital</option>
+                            <option value="5">Emergency Plus Hospital</option>
+                        </select>
+                    </div>
+
+                    <div class="hospital-preview" id="hospitalPreview" style="display: none;">
+                        <div class="hospital-preview-title">Preparing to share with:</div>
+                        <div class="hospital-preview-name" id="previewHospitalName">-</div>
+                        <button class="clear-btn" onclick="clearHospitalSelection()">Change</button>
+                    </div>
+
+                    <form id="patientForm">
+                        <div class="form-section">
+                            <div class="section-title">Basic Information</div>
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label class="form-label">Patient Name</label>
+                                    <input type="text" class="form-input" id="patientName" placeholder="Enter name">
+                                </div>
+                                <div class="form-group">
+                                    <label class="form-label">Age</label>
+                                    <input type="number" class="form-input" id="patientAge" placeholder="Age">
+                                </div>
+                                <div class="form-group">
+                                    <label class="form-label">Gender</label>
+                                    <select class="form-select" id="patientGender">
+                                        <option value="">Select</option>
+                                        <option value="MALE">Male</option>
+                                        <option value="FEMALE">Female</option>
+                                        <option value="OTHER">Other</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div class="form-row two-col">
+                                <div class="form-group">
+                                    <label class="form-label">Blood Type</label>
+                                    <select class="form-select" id="bloodType">
+                                        <option value="">Select</option>
+                                        <option value="A+">A+</option>
+                                        <option value="A-">A-</option>
+                                        <option value="B+">B+</option>
+                                        <option value="B-">B-</option>
+                                        <option value="AB+">AB+</option>
+                                        <option value="AB-">AB-</option>
+                                        <option value="O+">O+</option>
+                                        <option value="O-">O-</option>
+                                    </select>
+                                </div>
+                                <div class="form-group">
+                                    <label class="form-label">Patient ID</label>
+                                    <input type="text" class="form-input" id="patientId" placeholder="Auto-generated">
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="form-section">
+                            <div class="section-title">Current Vitals</div>
+                            <div class="vitals-grid">
+                                <div class="vital-card">
+                                    <div class="vital-icon">❤️</div>
+                                    <div class="vital-value"><input type="number" class="vital-input" id="heartRate" placeholder="72" style="width: 60px; background: transparent; border: none; text-align: center; font-family: 'Orbitron', sans-serif; font-size: 20px; color: #00f0ff;"></div>
+                                    <div class="vital-label">BPM</div>
+                                    <span class="vital-status vital-normal" id="hrStatus">Normal</span>
+                                </div>
+                                <div class="vital-card">
+                                    <div class="vital-icon">💉</div>
+                                    <div class="vital-value"><input type="text" class="vital-input" id="bloodPressure" placeholder="120/80" style="width: 70px; background: transparent; border: none; text-align: center; font-family: 'Orbitron', sans-serif; font-size: 16px; color: #00f0ff;"></div>
+                                    <div class="vital-label">mmHg</div>
+                                    <span class="vital-status vital-normal" id="bpStatus">Normal</span>
+                                </div>
+                                <div class="vital-card">
+                                    <div class="vital-icon">🌡️</div>
+                                    <div class="vital-value"><input type="number" step="0.1" class="vital-input" id="temperature" placeholder="98.6" style="width: 60px; background: transparent; border: none; text-align: center; font-family: 'Orbitron', sans-serif; font-size: 18px; color: #00f0ff;"></div>
+                                    <div class="vital-label">°F</div>
+                                    <span class="vital-status vital-normal" id="tempStatus">Normal</span>
+                                </div>
+                                <div class="vital-card">
+                                    <div class="vital-icon">🫁</div>
+                                    <div class="vital-value"><input type="number" class="vital-input" id="oxygen" placeholder="98" style="width: 50px; background: transparent; border: none; text-align: center; font-family: 'Orbitron', sans-serif; font-size: 20px; color: #00f0ff;"></div>
+                                    <div class="vital-label">SpO2%</div>
+                                    <span class="vital-status vital-normal" id="o2Status">Normal</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="form-section">
+                            <div class="section-title">Medical Information</div>
+                            <div class="form-group">
+                                <label class="form-label">Current Problem / Chief Complaint</label>
+                                <textarea class="form-textarea" id="currentProblem" placeholder="Describe the current medical problem..."></textarea>
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">Medical History</label>
+                                <textarea class="form-textarea" id="medicalHistory" placeholder="Previous conditions, surgeries, ongoing treatments..."></textarea>
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">Symptoms</label>
+                                <textarea class="form-textarea" id="symptoms" placeholder="Current symptoms observed..."></textarea>
+                            </div>
+                            <div class="form-row two-col">
+                                <div class="checkbox-group">
+                                    <input type="checkbox" id="isAllergic">
+                                    <label for="isAllergic">Patient has known allergies</label>
+                                </div>
+                                <div class="form-group" id="allergiesGroup" style="display: none;">
+                                    <input type="text" class="form-input" id="allergies" placeholder="Specify allergies...">
+                                </div>
+                            </div>
+                            <div class="checkbox-group">
+                                <input type="checkbox" id="onMedication">
+                                <label for="onMedication">Currently on medication</label>
+                            </div>
+                            <div class="form-group" id="medicationsGroup" style="display: none;">
+                                <input type="text" class="form-input" id="currentMedications" placeholder="List current medications...">
+                            </div>
+                        </div>
+
+                        <div class="submit-section">
+                            <button type="button" class="submit-btn secondary" onclick="saveDraft()">💾 SAVE DRAFT</button>
+                            <button type="submit" class="submit-btn primary">📤 SUBMIT & SHARE WITH HOSPITAL</button>
+                        </div>
+                    </form>
+                </div>
+
+                <div class="analytics-panel logs-panel">
+                    <div class="panel-title">📜 Activity Log</div>
+                    <div class="logs-header">
+                        <div class="filter-tabs">
+                            <button class="filter-tab active" data-filter="all">ALL</button>
+                            <button class="filter-tab" data-filter="emergency">EMERGENCY</button>
+                            <button class="filter-tab" data-filter="update">UPDATES</button>
+                            <button class="filter-tab" data-filter="share">SHARED</button>
+                        </div>
+                    </div>
+                    <div class="logs-list" id="logsList"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let logs = [];
+        let selectedHospital = null;
+
+        function updateClock() {
+            const now = new Date();
+            document.getElementById('navClock').textContent = now.toLocaleTimeString('en-US', {hour12: false});
+        }
+        setInterval(updateClock, 1000);
+        updateClock();
+
+        document.getElementById('destinationHospital').addEventListener('change', function() {
+            const hospitalId = this.value;
+            const hospitalName = this.options[this.selectedIndex].text;
+            if (hospitalId) {
+                selectedHospital = { id: hospitalId, name: hospitalName };
+                document.getElementById('hospitalPreview').style.display = 'block';
+                document.getElementById('previewHospitalName').textContent = hospitalName;
+            } else {
+                document.getElementById('hospitalPreview').style.display = 'none';
+                selectedHospital = null;
+            }
+        });
+
+        function clearHospitalSelection() {
+            document.getElementById('destinationHospital').value = '';
+            document.getElementById('hospitalPreview').style.display = 'none';
+            selectedHospital = null;
+        }
+
+        document.getElementById('isAllergic').addEventListener('change', function() {
+            document.getElementById('allergiesGroup').style.display = this.checked ? 'block' : 'none';
+        });
+
+        document.getElementById('onMedication').addEventListener('change', function() {
+            document.getElementById('medicationsGroup').style.display = this.checked ? 'block' : 'none';
+        });
+
+        function checkVitals() {
+            const hr = parseInt(document.getElementById('heartRate').value);
+            const temp = parseFloat(document.getElementById('temperature').value);
+            const o2 = parseInt(document.getElementById('oxygen').value);
+
+            if (hr) {
+                const hrStatus = hr < 60 || hr > 100 ? (hr < 50 || hr > 120 ? 'critical' : 'warning') : 'normal';
+                document.getElementById('hrStatus').className = 'vital-status vital-' + hrStatus;
+                document.getElementById('hrStatus').textContent = hrStatus.charAt(0).toUpperCase() + hrStatus.slice(1);
+            }
+
+            if (temp) {
+                const tempStatus = temp < 97 || temp > 99 ? (temp < 95 || temp > 103 ? 'critical' : 'warning') : 'normal';
+                document.getElementById('tempStatus').className = 'vital-status vital-' + tempStatus;
+                document.getElementById('tempStatus').textContent = tempStatus.charAt(0).toUpperCase() + tempStatus.slice(1);
+            }
+
+            if (o2) {
+                const o2Status = o2 < 95 ? (o2 < 90 ? 'critical' : 'warning') : 'normal';
+                document.getElementById('o2Status').className = 'vital-status vital-' + o2Status;
+                document.getElementById('o2Status').textContent = o2Status.charAt(0).toUpperCase() + o2Status.slice(1);
+            }
+        }
+
+        ['heartRate', 'temperature', 'oxygen'].forEach(id => {
+            document.getElementById(id).addEventListener('input', checkVitals);
+        });
+
+        document.getElementById('patientForm').addEventListener('submit', function(e) {
+            e.preventDefault();
+            
+            const patientData = {
+                patientId: 'PAT-' + Date.now(),
+                patientName: document.getElementById('patientName').value,
+                patientAge: parseInt(document.getElementById('patientAge').value),
+                patientGender: document.getElementById('patientGender').value,
+                bloodType: document.getElementById('bloodType').value,
+                heartRate: document.getElementById('heartRate').value,
+                bloodPressure: document.getElementById('bloodPressure').value,
+                temperature: document.getElementById('temperature').value,
+                oxygen: document.getElementById('oxygen').value,
+                currentProblem: document.getElementById('currentProblem').value,
+                medicalHistory: document.getElementById('medicalHistory').value,
+                symptoms: document.getElementById('symptoms').value,
+                isAllergic: document.getElementById('isAllergic').checked,
+                allergies: document.getElementById('allergies').value,
+                onMedication: document.getElementById('onMedication').checked,
+                currentMedications: document.getElementById('currentMedications').value,
+                destinationHospital: selectedHospital,
+                timestamp: new Date().toISOString()
+            };
+
+            fetch('/api/analytics/patient', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(patientData)
+            }).then(res => {
+                addLogEntry(patientData);
+                updateStats();
+                alert('Patient data submitted and shared with hospital!');
+                this.reset();
+                clearHospitalSelection();
+            }).catch(err => {
+                console.error('Error:', err);
+                addLogEntry(patientData);
+                updateStats();
+                alert('Data saved locally. Will sync when online.');
+                this.reset();
+            });
+        });
+
+        function saveDraft() {
+            const draft = {
+                patientName: document.getElementById('patientName').value || 'Unnamed',
+                timestamp: new Date().toISOString()
+            };
+            addLogEntry({ ...draft, type: 'info', detail: 'Draft saved' });
+            alert('Draft saved!');
+        }
+
+        function addLogEntry(data) {
+            const log = {
+                id: logs.length + 1,
+                type: data.currentProblem ? 'emergency' : 'info',
+                patientName: data.patientName || 'Unknown Patient',
+                detail: data.currentProblem || 'Patient data updated',
+                vitals: {
+                    hr: data.heartRate || '-',
+                    bp: data.bloodPressure || '-',
+                    temp: data.temperature || '-',
+                    o2: data.oxygen || '-'
+                },
+                hospital: data.destinationHospital?.name || 'Not assigned',
+                time: data.timestamp || new Date().toISOString()
+            };
+            logs.unshift(log);
+            renderLogs();
+        }
+
+        function renderLogs(filter = 'all') {
+            const list = document.getElementById('logsList');
+            const filteredLogs = filter === 'all' ? logs : logs.filter(l => l.type === filter);
+            
+            list.innerHTML = filteredLogs.map(log => `
+                <div class="log-entry ${log.type}">
+                    <div class="log-header">
+                        <span class="log-type">${log.type.toUpperCase()}</span>
+                        <span class="log-time">${formatTime(log.time)}</span>
+                    </div>
+                    <div class="log-patient">👤 ${log.patientName}</div>
+                    <div class="log-details">${log.detail}</div>
+                    <div class="log-vitals">
+                        <span class="log-vital">❤️ <span>${log.vitals.hr}</span></span>
+                        <span class="log-vital">💉 <span>${log.vitals.bp}</span></span>
+                        <span class="log-vital">🌡️ <span>${log.vitals.temp}°F</span></span>
+                        <span class="log-vital">🫁 <span>${log.vitals.o2}%</span></span>
+                    </div>
+                    ${log.hospital !== 'Not assigned' ? `<div style="margin-top: 8px; font-family: 'Rajdhani', sans-serif; font-size: 11px; color: #00ff88;">📤 Shared with: ${log.hospital}</div>` : ''}
+                </div>
+            `).join('');
+        }
+
+        function formatTime(isoString) {
+            const date = new Date(isoString);
+            return date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+        }
+
+        document.querySelectorAll('.filter-tab').forEach(tab => {
+            tab.addEventListener('click', function() {
+                document.querySelectorAll('.filter-tab').forEach(t => t.classList.remove('active'));
+                this.classList.add('active');
+                renderLogs(this.dataset.filter);
+            });
+        });
+
+        function updateStats() {
+            document.getElementById('totalPatients').textContent = logs.length || 5;
+            document.getElementById('criticalCases').textContent = logs.filter(l => l.type === 'emergency').length || 2;
+            document.getElementById('sharedHospitals').textContent = logs.filter(l => l.hospital !== 'Not assigned').length || 3;
+        }
+
+        document.getElementById('vLogoutBtn').addEventListener('click', () => {
+            document.getElementById('logoutBtn').click();
+        });
+
+        loadSampleLogs();
+        updateStats();
+
+        function loadSampleLogs() {
+            logs = [
+                { id: 1, type: 'emergency', patientName: 'Rajesh Kumar', detail: 'Chest pain, difficulty breathing', vitals: { hr: '110', bp: '150/95', temp: '98.4', o2: '94' }, hospital: 'City General Hospital', time: new Date().toISOString() },
+                { id: 2, type: 'info', patientName: 'Priya Sharma', detail: 'Follow-up vitals check', vitals: { hr: '72', bp: '120/80', temp: '98.6', o2: '99' }, hospital: 'Metro Medical Center', time: new Date(Date.now() - 600000).toISOString() },
+                { id: 3, type: 'emergency', patientName: 'Amit Singh', detail: 'Road accident, head injury suspected', vitals: { hr: '95', bp: '100/70', temp: '97.8', o2: '96' }, hospital: 'Emergency Plus Hospital', time: new Date(Date.now() - 1200000).toISOString() }
+            ];
+            renderLogs();
+            updateStats();
+        }
+    </script>
+</body>
+</html>

@@ -25,10 +25,16 @@ public class RoutingService {
 
     public RouteResponse calculateRoute(double fromLat, double fromLng, double toLat, double toLng) {
         try {
-            String url = String.format("%s/route/v1/driving/%f,%f;%f,%f?overview=full&geometries=geojson",
+            String url = String.format(java.util.Locale.US, "%s/route/v1/driving/%f,%f;%f,%f?overview=full&geometries=geojson",
                     osrmBaseUrl, fromLng, fromLat, toLng, toLat);
 
-            String response = restTemplate.getForObject(url, String.class);
+            org.springframework.http.HttpHeaders headers = new org.springframework.http.HttpHeaders();
+            headers.set("User-Agent", "ARIS-Command-Center/1.0 (Emergency Routing System)");
+            org.springframework.http.HttpEntity<String> entity = new org.springframework.http.HttpEntity<>(headers);
+            
+            org.springframework.http.ResponseEntity<String> responseEntity = restTemplate.exchange(
+                    url, org.springframework.http.HttpMethod.GET, entity, String.class);
+            String response = responseEntity.getBody();
             JsonNode root = objectMapper.readTree(response);
             JsonNode route = root.path("routes").get(0);
 
@@ -43,6 +49,7 @@ public class RoutingService {
 
             return new RouteResponse(coordinates, distanceMeters / 1000.0, durationSeconds / 60.0);
         } catch (Exception e) {
+            System.err.println("OSRM Routing failed: " + e.getMessage());
             // Fallback: return straight line with estimated ETA
             List<double[]> coords = new ArrayList<>();
             coords.add(new double[]{fromLat, fromLng});

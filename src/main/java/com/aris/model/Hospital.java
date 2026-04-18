@@ -27,6 +27,24 @@ public class Hospital {
     @Column(nullable = false)
     private String status = "OPEN";
 
+    @Column(name = "workload_percentage")
+    private Integer workloadPercentage;
+
+    @Column(name = "emergency_capacity")
+    private Integer emergencyCapacity;
+
+    @Column(name = "current_patients")
+    private Integer currentPatients;
+
+    @Column(name = "wait_time_minutes")
+    private Integer waitTimeMinutes;
+
+    @Column(name = "contact_phone")
+    private String contactPhone;
+
+    @Column(name = "address")
+    private String address;
+
     public Hospital() {}
 
     public Hospital(String name, Double lat, Double lng, Integer totalBeds, Integer availableBeds, String specialties) {
@@ -55,4 +73,16 @@ public class Hospital {
     public void setSpecialties(String specialties) { this.specialties = specialties; }
     public String getStatus() { return status; }
     public void setStatus(String status) { this.status = status; }
+    public Integer getWorkloadPercentage() { return workloadPercentage; }
+    public void setWorkloadPercentage(Integer workloadPercentage) { this.workloadPercentage = workloadPercentage; }
+    public Integer getEmergencyCapacity() { return emergencyCapacity; }
+    public void setEmergencyCapacity(Integer emergencyCapacity) { this.emergencyCapacity = emergencyCapacity; }
+    public Integer getCurrentPatients() { return currentPatients; }
+    public void setCurrentPatients(Integer currentPatients) { this.currentPatients = currentPatients; }
+    public Integer getWaitTimeMinutes() { return waitTimeMinutes; }
+    public void setWaitTimeMinutes(Integer waitTimeMinutes) { this.waitTimeMinutes = waitTimeMinutes; }
+    public String getContactPhone() { return contactPhone; }
+    public void setContactPhone(String contactPhone) { this.contactPhone = contactPhone; }
+    public String getAddress() { return address; }
+    public void setAddress(String address) { this.address = address; }
 }

@@ -12,6 +12,12 @@ public class DispatchRequest {
 
     public DispatchRequest() {}
 
+    public DispatchRequest(Long unitId, Long hospitalId, Long incidentId) {
+        this.unitId = unitId;
+        this.hospitalId = hospitalId;
+        this.incidentId = incidentId;
+    }
+
     public Long getUnitId() { return unitId; }
     public void setUnitId(Long unitId) { this.unitId = unitId; }
     public Long getHospitalId() { return hospitalId; }

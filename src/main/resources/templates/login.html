@@ -147,6 +147,8 @@
                                 <option value="DISPATCHER">DISPATCHER</option>
                                 <option value="COORDINATOR">COORDINATOR</option>
                                 <option value="SUPERVISOR">SUPERVISOR</option>
+                                <option value="DRIVER">DRIVER</option>
+                                <option value="PATIENT">PATIENT</option>
                             </select>
                             <span class="input-icon">◈</span>
                             <div class="input-glow"></div>
@@ -313,10 +315,20 @@
                     localStorage.setItem('resq_token', data.token);
                     localStorage.setItem('resq_user', data.username);
                     localStorage.setItem('resq_role', data.role);
+                    localStorage.setItem('resq_userId', data.userId);
                     // Fade out then redirect
                     document.body.style.transition = 'opacity 0.6s';
                     document.body.style.opacity = '0';
-                    setTimeout(() => { window.location.href = '/dashboard'; }, 600);
+                    setTimeout(() => { 
+                        const role = data.role;
+                        if (role === 'PATIENT') {
+                            window.location.href = '/patient';
+                        } else if (role === 'DRIVER') {
+                            window.location.href = '/driver';
+                        } else {
+                            window.location.href = '/dashboard';
+                        }
+                    }, 600);
                 } else {
                     errorMsg.textContent = data.error || 'Authentication failed — check credentials';
                     errorMsg.style.display = 'block';
@@ -333,9 +345,16 @@
             }
         });
 
-        // Redirect if already authenticated
-        if (localStorage.getItem('resq_token')) {
-            window.location.href = '/dashboard';
+        // Check if user wants to stay on login page
+        const urlParams = new URLSearchParams(window.location.search);
+        if (urlParams.get('logout') === 'true') {
+            localStorage.removeItem('resq_token');
+            localStorage.removeItem('resq_user');
+            localStorage.removeItem('resq_role');
+            localStorage.removeItem('resq_userId');
+        } else if (localStorage.getItem('resq_token')) {
+            // Show dashboard link option
+            document.getElementById('loginForm').innerHTML += '<div style="text-align:center;margin-top:15px;"><a href="/dashboard" style="color:#00f0ff;font-family:Rajdhani,sans-serif;">Go to Dashboard →</a></div>';
         }
     });
     </script>

@@ -15,7 +15,7 @@ import org.springframework.security.web.authentication.UsernamePasswordAuthentic
 
 @Configuration
 @EnableWebSecurity
-@EnableMethodSecurity
+@EnableMethodSecurity(prePostEnabled = true)
 public class SecurityConfig {
 
     private final JwtAuthFilter jwtAuthFilter;
@@ -30,18 +30,34 @@ public class SecurityConfig {
             .csrf(csrf -> csrf.disable())
             .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
             .authorizeHttpRequests(auth -> auth
-                .requestMatchers(
-                    "/", "/login", "/dashboard",
-                    "/api/auth/**",
-                    "/api/dashboard/stats",
-                    "/css/**", "/js/**", "/images/**",
-                    "/ws/**",
-                    "/h2-console/**"
-                ).permitAll()
-                .requestMatchers("/api/admin/**").hasRole("COMMAND")
+                .requestMatchers("/api/auth/**").permitAll()
+                .requestMatchers("/api/dashboard/stats").permitAll()
+                .requestMatchers("/ws/**").permitAll()
+                .requestMatchers("/login", "/", "/dashboard", "/units", "/hospitals", "/incidents", "/analytics", "/patient", "/driver", "/settings").permitAll()
+                .requestMatchers("/css/**", "/js/**", "/images/**").permitAll()
+                
+                .requestMatchers("/api/admin/**").hasAnyRole("COMMAND", "COORDINATOR", "SUPERVISOR")
+                
+                .requestMatchers("/api/patient/**").hasRole("PATIENT")
+                .requestMatchers("/api/driver/**").hasRole("DRIVER")
+                
+                .requestMatchers("/api/dispatch").hasAnyRole("COMMAND", "DISPATCHER", "COORDINATOR", "SUPERVISOR")
+                .requestMatchers("/api/incidents/**").hasAnyRole("COMMAND", "DISPATCHER", "COORDINATOR", "SUPERVISOR", "DRIVER")
+                .requestMatchers("/api/hospitals/**").authenticated()
+                .requestMatchers("/api/ambulances/**").authenticated()
+                .requestMatchers("/api/route/**").authenticated()
+                .requestMatchers("/api/events/**").authenticated()
+                
                 .anyRequest().authenticated()
             )
             .headers(headers -> headers.frameOptions(frame -> frame.disable()))
+            .logout(logout -> logout
+                .logoutUrl("/api/auth/logout")
+                .logoutSuccessUrl("/login?logout=true")
+                .invalidateHttpSession(true)
+                .deleteCookies("JSESSIONID")
+                .permitAll()
+            )
             .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class);
 
         return http.build();

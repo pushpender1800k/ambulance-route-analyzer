@@ -41,10 +41,19 @@
         setTimeout(() => { window.location.href = '/login'; }, 500);
     });
 
-    // ═══ MAP SETUP ═══
-    const map = L.map('map', { zoomControl: false, attributionControl: false }).setView([28.58, 77.22], 12);
-    const streetLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19 }).addTo(map);
-    const satLayer = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', { maxZoom: 19 });
+    // ═══ MAP SETUP — Dark CartoDB theme ═══
+    const map = L.map('mainMap', { zoomControl: false, attributionControl: false }).setView([28.58, 77.22], 12);
+
+    const streetLayer = L.tileLayer(
+        'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
+        { maxZoom: 19, subdomains: 'abcd' }
+    ).addTo(map);
+
+    const satLayer = L.tileLayer(
+        'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+        { maxZoom: 19 }
+    );
+
     L.control.zoom({ position: 'bottomright' }).addTo(map);
 
     map.on('mousemove', (e) => {
@@ -80,8 +89,27 @@
         });
     }
 
-    const ambIcon = divIcon('🚑', 'ambulance-marker', 28);
-    const heliIcon = divIcon('🚁', 'ambulance-marker', 28);
+    // Status-aware ambulance icon — big, colour-coded, pulsing on dark map
+    function ambStatusIcon(unitCode, status) {
+        const isHeli = unitCode && unitCode.startsWith('HELI');
+        const emoji = isHeli ? '🚁' : '🚑';
+        const bg = status === 'STANDBY'            ? '#00ff88'
+                 : status === 'TRANSIT_TO_PATIENT' ? '#FFD600'
+                 : status === 'ON_SCENE'            ? '#ff6644'
+                 : status === 'TRANSIT_TO_HOSPITAL' ? '#00f0ff'
+                 : '#aaaaaa';
+        const glow = status === 'STANDBY' ? 'rgba(0,255,136,0.5)' : `${bg}80`;
+        return L.divIcon({
+            html: `<div style="position:relative;width:42px;height:42px;">
+                     <div style="position:absolute;inset:0;border-radius:50%;background:${bg};opacity:0.25;animation:ambPulse 1.8s ease-in-out infinite;"></div>
+                     <div style="position:absolute;inset:4px;border-radius:50%;background:rgba(10,15,20,0.9);border:2px solid ${bg};box-shadow:0 0 10px ${glow};display:flex;align-items:center;justify-content:center;font-size:18px;">${emoji}</div>
+                   </div>`,
+            iconSize: [42, 42], iconAnchor: [21, 21], className: ''
+        });
+    }
+
+    const ambIcon  = ambStatusIcon(null, 'STANDBY');
+    const heliIcon = ambStatusIcon('HELI', 'STANDBY');
     const incIcon = divIcon('🔴', 'incident-marker', 22);
 
     function hospIcon(h) {
@@ -105,12 +133,22 @@
     async function apiPost(url, body) {
         try {
             const r = await fetch(url, { method: 'POST', headers: AUTH, body: JSON.stringify(body) });
-            return await r.json();
+            const data = await r.json();
+            if (r.status === 409) {
+                alert('⚠️ Dispatch Blocked: ' + (data.message || 'Unit or Incident already assigned.'));
+                return null;
+            }
+            if (!r.ok) {
+                alert('❌ Error: ' + (data.message || 'Failed to dispatch.'));
+                return null;
+            }
+            return data;
         } catch (e) { console.error('POST:', url, e); return null; }
     }
 
-    // ═══ ANIMATED COUNT ═══
+    // ═══ ANIMATED COUNT (null-safe) ═══
     function animateValue(el, target, decimals, duration) {
+        if (!el) return;  // guard: skip missing elements
         const start = parseFloat(el.textContent) || 0;
         const startTime = performance.now();
         function tick(now) {
@@ -136,13 +174,17 @@
     async function loadStats() {
         const d = await api('/api/dashboard/stats');
         if (!d) return;
-        animateValue(document.getElementById('navIncidents'), d.activeIncidents, 0, 600);
-        animateValue(document.getElementById('navDeployed'), d.deployedUnits, 0, 600);
-        animateValue(document.getElementById('navEta'), d.avgEta || 0, 1, 600);
-        animateValue(document.getElementById('navBeds'), d.availableBeds, 0, 600);
-        animateValue(document.getElementById('metricTotal'), d.totalAmbulances || 5, 0, 600);
-        animateValue(document.getElementById('metricHospitals'), d.totalHospitals || 7, 0, 600);
-        animateValue(document.getElementById('metricAvgEta'), d.avgEta || 0, 1, 600);
+        // Only animate elements that actually exist in the DOM
+        const set = (id, val, dec) => animateValue(document.getElementById(id), val, dec, 600);
+        set('navIncidents',  d.activeIncidents      || 0, 0);
+        set('navDeployed',   d.deployedUnits         || 0, 0);
+        set('navAvailable',  d.availableUnits        || 0, 0);
+        set('navEta',        d.avgEta                || 0, 1);
+        set('navBeds',       d.availableBeds         || 0, 0);
+        set('metricTotal',   d.totalAmbulances       || 5, 0);
+        set('metricAvgEta',  d.avgEta                || 0, 1);
+        // metricHospitals optional — only update if present
+        set('metricHospitals', d.totalHospitals      || 7, 0);
     }
 
     // ═══ LOAD AMBULANCES + LIVE ROUTE TRACKING ═══
@@ -156,9 +198,10 @@
         list.innerHTML = '';
 
         for (const a of data) {
-            const icon = a.unitCode.startsWith('HELI') ? heliIcon : ambIcon;
+            const icon = ambStatusIcon(a.unitCode, a.status);
             if (ambulanceMarkers[a.id]) {
                 ambulanceMarkers[a.id].setLatLng([a.lat, a.lng]);
+                ambulanceMarkers[a.id].setIcon(icon);
                 ambulanceMarkers[a.id].setPopupContent(
                     `<strong>${a.unitCode}</strong><br>Status: ${a.status}<br>` +
                     `<span style="font-family:monospace;font-size:11px;">${a.lat.toFixed(4)}, ${a.lng.toFixed(4)}</span>`
@@ -170,12 +213,22 @@
             }
 
             // ── ZOMATO-STYLE ROUTE TRIMMING ──
-            // If ambulance is TRANSIT and we have a cached route, trim it
-            if (a.status === 'TRANSIT' && activeRoutes[a.id]) {
-                trimRouteToPosition(a.id, a.lat, a.lng);
+            if ((a.status === 'TRANSIT_TO_PATIENT' || a.status === 'ON_SCENE' || a.status === 'TRANSIT_TO_HOSPITAL')) {
+                if (activeRoutes[a.id]) {
+                    trimRouteToPosition(a.id, a.lat, a.lng);
+                } else if (a.status !== 'ON_SCENE') {
+                    // Re-hydrate route if it's missing (e.g. after page refresh)
+                    // We need target coords. For simplicity, we'll try to get them if possible.
+                    // This part depends on backend having destinationLat/Lng which we saw in the model.
+                    if (a.destinationLat && a.destinationLng) {
+                        const phase = a.status === 'TRANSIT_TO_PATIENT' ? 'TO_INCIDENT' : 'TO_HOSPITAL';
+                        showRoute(a.id, a.lat, a.lng, a.destinationLat, a.destinationLng, phase);
+                    }
+                }
             }
 
-            const sc = a.status === 'ACTIVE' ? 'status-active' : a.status === 'TRANSIT' ? 'status-transit' : 'status-standby';
+            const sc = a.status === 'ON_SCENE' ? 'status-active' : 
+                       (a.status === 'TRANSIT_TO_PATIENT' || a.status === 'TRANSIT_TO_HOSPITAL') ? 'status-transit' : 'status-standby';
             const ic = a.unitCode.startsWith('HELI') ? '🚁' : '🚑';
             list.innerHTML += `
                 <div class="unit-item">
@@ -188,10 +241,10 @@
                 </div>`;
         }
 
-        // Clean up routes for ambulances that are no longer TRANSIT
+        // Clean up routes for ambulances that are no longer active
         for (const ambId of Object.keys(activeRoutes)) {
             const amb = data.find(a => a.id == ambId);
-            if (!amb || amb.status !== 'TRANSIT') {
+            if (!amb || (amb.status !== 'TRANSIT_TO_PATIENT' && amb.status !== 'ON_SCENE' && amb.status !== 'TRANSIT_TO_HOSPITAL')) {
                 removeRoute(ambId);
             }
         }
@@ -233,17 +286,22 @@
         // Remove existing route for this ambulance
         removeRoute(ambId);
 
+        console.log(`[MAP] Fetching route for ${ambId} (${phase})...`);
         const route = await api(`/api/route?from=${fromLat},${fromLng}&to=${toLat},${toLng}`);
-        if (!route || !route.coordinates || route.coordinates.length < 2) return;
+        if (!route || !route.coordinates || route.coordinates.length < 2) {
+            console.error(`[MAP] Failed to fetch route for ${ambId}`);
+            return;
+        }
 
-        const color = phase === 'TO_INCIDENT' ? '#FFD600' : '#00d4f5'; // Yellow or Cyan
-        const weight = phase === 'TO_INCIDENT' ? 4 : 3;
+        console.log(`[MAP] Showing ${phase} route for ${ambId} (${route.coordinates.length} points)`);
+        const color = phase === 'TO_INCIDENT' ? '#FFD600' : '#1a6fff'; // Yellow or High-Contrast Blue
+        const weight = 4;
 
         const layer = L.polyline(route.coordinates, {
             color: color,
             weight: weight,
-            opacity: 0.85,
-            dashArray: phase === 'TO_INCIDENT' ? '10, 6' : '8, 5',
+            opacity: 0.9,
+            dashArray: '10, 6',
             className: 'animated-route'
         }).addTo(map);
 
@@ -271,10 +329,9 @@
         if (!data) return;
         cachedHospitals = data;
 
-        const matrix = document.getElementById('hospitalMatrix');
-        matrix.innerHTML = '';
-
+        // ── MAP MARKERS (always run) ──
         data.forEach(h => {
+            if (!h.lat || !h.lng) return;
             if (hospitalMarkers[h.id]) {
                 hospitalMarkers[h.id].setLatLng([h.lat, h.lng]);
                 hospitalMarkers[h.id].setIcon(hospIcon(h));
@@ -286,12 +343,18 @@
                     .bindPopup(`<strong>${h.name}</strong><br>Beds: ${h.availableBeds}/${h.totalBeds}<br>${h.specialties || ''}`)
                     .addTo(map);
             }
+        });
 
+        // ── SIDEBAR PANEL (only if element exists) ──
+        const matrix = document.getElementById('hospitalMatrix');
+        if (!matrix) return;
+        matrix.innerHTML = '';
+
+        data.forEach(h => {
             const pct = h.totalBeds > 0 ? (h.availableBeds / h.totalBeds) * 100 : 0;
             const bar = pct > 60 ? 'green' : pct > 30 ? 'amber' : 'red';
             const bedCls = pct > 60 ? 'green' : pct > 30 ? 'amber' : 'red';
             const specs = h.specialties ? h.specialties.split(',') : [];
-
             matrix.innerHTML += `
                 <div class="hospital-card">
                     <div class="hc-header">
@@ -316,7 +379,7 @@
         const data = await api('/api/incidents');
         if (!data) return;
 
-        // Remove old incident markers
+        // Remove old incident markers for resolved incidents
         Object.keys(incidentMarkers).forEach(id => {
             if (!data.find(inc => inc.id == id)) {
                 map.removeLayer(incidentMarkers[id]);
@@ -324,28 +387,12 @@
             }
         });
 
-        const mc = document.getElementById('missionContent');
+        // Filter to active incidents only
+        const activeData = data.filter(inc => inc.status === 'UNASSIGNED' || inc.status === 'ASSIGNED');
 
-        if (data.length === 0) {
-            mc.innerHTML = '<p class="no-mission">No active incidents. System standby.</p>';
-            document.getElementById('aiContent').innerHTML = '<p class="no-mission">Awaiting incident data for analysis...</p>';
-            document.getElementById('routingOptions').innerHTML = '<p class="no-mission">Awaiting routing analysis...</p>';
-            return;
-        }
-
-        latestIncident = data[data.length - 1];
-        mc.innerHTML = `
-            <div class="mission-card">
-                <div class="mc-header">
-                    <span class="mc-id">INC-${String(latestIncident.id).padStart(4, '0')}</span>
-                    <span class="mc-status">${latestIncident.status}</span>
-                </div>
-                <div class="mc-condition">${latestIncident.condition || 'Emergency'}</div>
-                <div class="mc-coords">📍 ${latestIncident.lat.toFixed(4)}, ${latestIncident.lng.toFixed(4)}</div>
-            </div>`;
-
-        // Add red markers for active incidents only
-        data.forEach(inc => {
+        // ── MAP MARKERS (always run) ──
+        activeData.forEach(inc => {
+            if (!inc.lat || !inc.lng) return;
             if (incidentMarkers[inc.id]) {
                 incidentMarkers[inc.id].setLatLng([inc.lat, inc.lng]);
             } else {
@@ -355,7 +402,45 @@
             }
         });
 
-        loadRoutingOptions(latestIncident);
+        // Update left-panel incident list
+        const incList = document.getElementById('incidentList');
+        if (incList) {
+            incList.innerHTML = activeData.length === 0
+                ? '<p style="color:#555;font-size:12px;padding:10px;">No active incidents</p>'
+                : activeData.map(inc => `
+                    <div style="background:rgba(255,100,68,0.1);border-left:3px solid #ff6444;border-radius:6px;padding:10px;margin-bottom:8px;">
+                        <div style="font-family:'Orbitron',sans-serif;font-size:11px;color:#ff6444;">INC-${String(inc.id).padStart(4,'0')}</div>
+                        <div style="font-size:12px;color:#ccc;margin-top:3px;">${inc.condition || 'Emergency'}</div>
+                        <div style="font-size:10px;color:#555;margin-top:2px;">📍 ${(inc.lat||0).toFixed(4)}, ${(inc.lng||0).toFixed(4)}</div>
+                    </div>`).join('');
+        }
+
+        // ── SIDEBAR PANELS (only if elements exist) ──
+        const mc = document.getElementById('missionContent');
+        if (mc) {
+            if (activeData.length === 0) {
+                mc.innerHTML = '<p class="no-mission">No active incidents. System standby.</p>';
+                const ai = document.getElementById('aiContent');
+                const ro = document.getElementById('routingOptions');
+                if (ai) ai.innerHTML = '<p class="no-mission">Awaiting incident data for analysis...</p>';
+                if (ro) ro.innerHTML = '<p class="no-mission">Awaiting routing analysis...</p>';
+                return;
+            }
+            latestIncident = activeData[activeData.length - 1];
+            mc.innerHTML = `
+                <div class="mission-card">
+                    <div class="mc-header">
+                        <span class="mc-id">INC-${String(latestIncident.id).padStart(4, '0')}</span>
+                        <span class="mc-status">${latestIncident.status}</span>
+                    </div>
+                    <div class="mc-condition">${latestIncident.condition || 'Emergency'}</div>
+                    <div class="mc-coords">📍 ${latestIncident.lat.toFixed(4)}, ${latestIncident.lng.toFixed(4)}</div>
+                </div>`;
+            loadRoutingOptions(latestIncident);
+        } else if (activeData.length > 0) {
+            latestIncident = activeData[activeData.length - 1];
+            loadRoutingOptions(latestIncident);
+        }
     }
 
     // ═══ FIND CLOSEST STANDBY AMBULANCE ═══
@@ -371,6 +456,12 @@
 
     // ═══ AI ROUTING + OPTIONS ═══
     async function loadRoutingOptions(incident) {
+        if (incident.status !== 'UNASSIGNED') {
+            document.getElementById('aiContent').innerHTML = '<p class="no-mission">Incident already assigned.</p>';
+            document.getElementById('routingOptions').innerHTML = '<p class="no-mission">Dispatch blocked.</p>';
+            return;
+        }
+
         const hospitals = cachedHospitals.length > 0 ? cachedHospitals : await api('/api/hospitals');
         if (!hospitals || !incident) return;
 
@@ -492,7 +583,7 @@
     async function checkPhaseChanges() {
         const ambs = cachedAmbulances;
         for (const a of ambs) {
-            if (a.status !== 'TRANSIT') continue;
+            if (a.status !== 'TRANSIT_TO_PATIENT') continue;
 
             const route = activeRoutes[a.id];
             if (!route) continue;
@@ -662,19 +753,20 @@
 
     // ═══ INIT ═══
     async function init() {
-        await loadStats();
-        await loadHospitals();
-        await loadAmbulances();
-        await loadIncidents();
-        await loadInitialEvents();
+        // Run each step independently — one failure must NOT block the next
+        try { await loadStats();         } catch(e) { console.warn('[INIT] loadStats failed', e); }
+        try { await loadHospitals();     } catch(e) { console.warn('[INIT] loadHospitals failed', e); }
+        try { await loadAmbulances();    } catch(e) { console.warn('[INIT] loadAmbulances failed', e); }
+        try { await loadIncidents();     } catch(e) { console.warn('[INIT] loadIncidents failed', e); }
+        try { await loadInitialEvents(); } catch(e) { console.warn('[INIT] loadEvents failed', e); }
         connectWS();
 
         // Polling
         setInterval(loadStats, 5000);
-        setInterval(loadAmbulances, 2000);  // Match SimulationService tick
+        setInterval(loadAmbulances, 2000);
         setInterval(loadHospitals, 10000);
         setInterval(loadIncidents, 3000);
-        setInterval(checkPhaseChanges, 2000); // Check for yellow→blue route switches
+        setInterval(checkPhaseChanges, 2000);
     }
 
     init();

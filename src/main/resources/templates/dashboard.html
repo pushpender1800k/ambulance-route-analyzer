@@ -3,212 +3,477 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>RESQ — Command Center</title>
+    <title>RESQ — Command Map</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;500;600;700;800;900&family=Rajdhani:wght@300;400;500;600;700&family=Share+Tech+Mono&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/sockjs-client/1.5.1/sockjs.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/stomp.js/2.3.3/stomp.min.js"></script>
     <link rel="stylesheet" href="/css/dashboard.css">
+    <style>
+        .dashboard-grid {
+            display: grid;
+            grid-template-columns: 350px 1fr;
+            height: calc(100vh - 60px);
+        }
+
+        .left-panel {
+            background: rgba(10,15,20,0.95);
+            border-right: 1px solid rgba(0,240,255,0.2);
+            padding: 20px;
+            overflow-y: auto;
+        }
+
+        .panel-title {
+            font-family: 'Orbitron', sans-serif;
+            font-size: 13px;
+            color: #00f0ff;
+            text-transform: uppercase;
+            margin-bottom: 15px;
+            padding-bottom: 10px;
+            border-bottom: 1px solid rgba(0,240,255,0.2);
+        }
+
+        .my-ambulance-card {
+            background: linear-gradient(135deg, rgba(0,240,255,0.1) 0%, rgba(0,0,0,0.3) 100%);
+            border: 1px solid rgba(0,240,255,0.3);
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+
+        .ambulance-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+        }
+
+        .ambulance-code {
+            font-family: 'Orbitron', sans-serif;
+            font-size: 18px;
+            color: #fff;
+        }
+
+        .status-badge {
+            padding: 5px 10px;
+            border-radius: 15px;
+            font-family: 'Rajdhani', sans-serif;
+            font-size: 11px;
+            font-weight: 600;
+        }
+
+        .status-available { background: rgba(0,255,136,0.2); color: #00ff88; }
+        .status-deployed { background: rgba(255,170,0,0.2); color: #ffaa00; }
+
+        .patient-card {
+            background: rgba(0,0,0,0.4);
+            border-radius: 10px;
+            padding: 15px;
+            margin-top: 15px;
+        }
+
+        .patient-name {
+            font-family: 'Orbitron', sans-serif;
+            font-size: 15px;
+            color: #ff6644;
+        }
+
+        .patient-condition {
+            font-family: 'Rajdhani', sans-serif;
+            font-size: 13px;
+            color: #888;
+            margin: 5px 0 12px;
+        }
+
+        .vitals-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 8px;
+        }
+
+        .vital-box {
+            background: rgba(0,0,0,0.3);
+            border-radius: 6px;
+            padding: 10px 5px;
+            text-align: center;
+        }
+
+        .vital-value {
+            font-family: 'Orbitron', sans-serif;
+            font-size: 14px;
+            color: #00f0ff;
+        }
+
+        .vital-label {
+            font-family: 'Rajdhani', sans-serif;
+            font-size: 9px;
+            color: #666;
+            text-transform: uppercase;
+        }
+
+        .route-info {
+            margin-top: 15px;
+            padding: 12px;
+            background: rgba(0,240,255,0.1);
+            border-radius: 8px;
+            text-align: center;
+        }
+
+        .route-hospital {
+            font-family: 'Rajdhani', sans-serif;
+            font-size: 12px;
+            color: #00f0ff;
+        }
+
+        .route-eta {
+            font-family: 'Orbitron', sans-serif;
+            font-size: 28px;
+            color: #00ff88;
+            margin-top: 5px;
+        }
+
+        .route-eta-label {
+            font-family: 'Rajdhani', sans-serif;
+            font-size: 11px;
+            color: #666;
+        }
+
+        .no-assignment {
+            text-align: center;
+            padding: 30px;
+            color: #666;
+        }
+
+        .no-assignment-icon {
+            font-size: 40px;
+            margin-bottom: 10px;
+        }
+
+        .no-assignment-text {
+            font-family: 'Rajdhani', sans-serif;
+            font-size: 13px;
+        }
+
+        .map-area {
+            position: relative;
+        }
+
+        #mainMap {
+            width: 100%;
+            height: 100%;
+        }
+
+        .map-top-bar {
+            position: absolute;
+            top: 15px;
+            left: 50%;
+            transform: translateX(-50%);
+            display: flex;
+            gap: 15px;
+            z-index: 1000;
+        }
+
+        .map-search {
+            background: rgba(10,15,20,0.95);
+            border: 1px solid rgba(0,240,255,0.3);
+            border-radius: 4px;
+            color: #fff;
+            padding: 8px 15px;
+            font-family: 'Rajdhani', sans-serif;
+            width: 250px;
+            outline: none;
+        }
+
+        .map-btn-group {
+            display: flex;
+            background: rgba(10,15,20,0.95);
+            border: 1px solid rgba(0,240,255,0.3);
+            border-radius: 4px;
+            overflow: hidden;
+        }
+
+        .map-btn {
+            background: transparent;
+            color: #666;
+            border: none;
+            padding: 8px 15px;
+            font-family: 'Orbitron', sans-serif;
+            font-size: 11px;
+            cursor: pointer;
+            transition: 0.3s;
+        }
+
+        .map-btn.active {
+            background: rgba(0,240,255,0.1);
+            color: #00f0ff;
+        }
+
+        .map-bottom-bar {
+            position: absolute;
+            bottom: 25px;
+            left: 15px;
+            display: flex;
+            gap: 15px;
+            z-index: 1000;
+        }
+
+        .action-btn {
+            background: rgba(10,15,20,0.95);
+            border: 1px solid rgba(0,240,255,0.3);
+            border-radius: 4px;
+            color: #00f0ff;
+            padding: 10px 20px;
+            font-family: 'Orbitron', sans-serif;
+            font-size: 12px;
+            cursor: pointer;
+            transition: 0.3s;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .action-btn:hover {
+            background: rgba(0,240,255,0.1);
+        }
+
+        .btn-warning {
+            border-color: #ffaa00;
+            color: #ffaa00;
+        }
+
+        .btn-warning:hover {
+            background: rgba(255,170,0,0.1);
+        }
+
+        .map-overlay {
+            position: absolute;
+            top: 15px;
+            left: 15px;
+            right: 15px;
+            display: flex;
+            justify-content: space-between;
+            z-index: 1000;
+            pointer-events: none;
+        }
+
+        .map-stats {
+            display: flex;
+            gap: 10px;
+        }
+
+        .map-stat {
+            background: rgba(10,15,20,0.95);
+            border: 1px solid rgba(0,240,255,0.3);
+            border-radius: 8px;
+            padding: 10px 18px;
+            text-align: center;
+            pointer-events: auto;
+        }
+
+        .map-stat-value {
+            font-family: 'Orbitron', sans-serif;
+            font-size: 18px;
+            color: #00f0ff;
+        }
+
+        .map-stat-label {
+            font-family: 'Rajdhani', sans-serif;
+            font-size: 9px;
+            color: #666;
+            text-transform: uppercase;
+        }
+
+        .admin-incidents {
+            max-height: 250px;
+            overflow-y: auto;
+        }
+
+        .incident-item {
+            background: rgba(0,0,0,0.3);
+            border-radius: 8px;
+            padding: 12px;
+            margin-bottom: 10px;
+            border-left: 3px solid #ff6644;
+            cursor: pointer;
+        }
+
+        .incident-type {
+            font-family: 'Orbitron', sans-serif;
+            font-size: 11px;
+            color: #fff;
+        }
+
+        .incident-location {
+            font-family: 'Rajdhani', sans-serif;
+            font-size: 12px;
+            color: #888;
+            margin-top: 3px;
+        }
+
+        .incident-time {
+            font-family: 'Share Tech Mono', monospace;
+            font-size: 10px;
+            color: #666;
+            margin-top: 3px;
+        }
+
+        .logout-form { display: none; }
+
+        .ambulance-marker {
+            font-size: 24px;
+            text-align: center;
+        }
+
+        .incident-marker {
+            font-size: 20px;
+            text-align: center;
+        }
+
+        .leaflet-popup-content-wrapper {
+            background: rgba(10,15,20,0.95);
+        .leaflet-popup-tip {
+            background: rgba(10,15,20,0.95);
+        }
+
+        @keyframes ambPulse {
+            0%, 100% { transform: scale(1);   opacity: 0.25; }
+            50%       { transform: scale(1.6); opacity: 0.05; }
+        }
+    </style>
 </head>
 <body>
-    <!-- TOP NAVIGATION BAR -->
-    <nav class="top-nav">
-        <div class="nav-left">
-            <div class="nav-brand">
-                <div class="brand-icon">R</div>
-                <span class="brand-name">RESQ</span>
+    <div class="app-wrapper">
+        <nav class="vertical-nav">
+            <div class="vnav-brand"><div class="vbrand-icon">R</div></div>
+            <div class="vnav-items">
+                <a href="/dashboard" class="vnav-btn active"><span class="vnav-icon">🗺️</span></a>
+                <a href="/units" class="vnav-btn"><span class="vnav-icon">🚑</span></a>
+                <a href="/hospitals" class="vnav-btn"><span class="vnav-icon">🏥</span></a>
+                <a href="/incidents" class="vnav-btn"><span class="vnav-icon">🔴</span></a>
+                <a href="/analytics" class="vnav-btn"><span class="vnav-icon">📊</span></a>
+                <a href="/settings" class="vnav-btn"><span class="vnav-icon">⚙️</span></a>
             </div>
-            <div class="nav-divider"></div>
-            <span class="nav-subtitle">COMMAND CENTER</span>
-            <div class="nav-status">
-                <span class="status-indicator online"></span>
-                <span class="status-text">OPERATIONAL</span>
+            <div class="vnav-bottom">
+                <button class="vnav-btn" id="vLogoutBtn" title="Logout"><span class="vnav-icon">⏻</span></button>
+            </div>
+        </nav>
+
+        <div class="main-content">
+            <nav class="top-nav">
+                <div class="nav-left">
+                    <div class="nav-brand">
+                        <div class="brand-icon">R</div>
+                        <span class="brand-name">RESQ</span>
+                    </div>
+                    <div class="nav-divider"></div>
+                    <span class="nav-subtitle" id="navSubtitle">COMMAND MAP</span>
+                </div>
+                <div class="nav-center">
+                    <div class="nav-stat">
+                        <span class="ns-value" id="navIncidents">0</span>
+                        <span class="ns-label">INCIDENTS</span>
+                    </div>
+                    <div class="nav-stat">
+                        <span class="ns-value" id="navDeployed">0</span>
+                        <span class="ns-label">DEPLOYED</span>
+                    </div>
+                    <div class="nav-stat">
+                        <span class="ns-value" id="navAvailable">0</span>
+                        <span class="ns-label">AVAILABLE</span>
+                    </div>
+                    <div class="nav-stat">
+                        <span class="ns-value" id="navEta">0</span>
+                        <span class="ns-label">AVG ETA</span>
+                    </div>
+                    <div class="nav-stat">
+                        <span class="ns-value" id="navBeds">0</span>
+                        <span class="ns-label">BEDS</span>
+                    </div>
+                </div>
+                <div class="nav-right">
+                    <div class="nav-clock" id="navClock">00:00:00</div>
+                    <div class="uptime" id="uptimeCounter" style="font-size: 10px; color: #666; margin: 0 10px;">UPTIME: 00:00:00</div>
+                    <div class="nav-user">
+                        <span class="user-role" id="userRole">COMMAND</span>
+                        <span class="user-name" id="userName">admin</span>
+                    </div>
+                    <div class="nav-avatar" id="navAvatar">A</div>
+                    <button class="logout-btn" id="logoutBtn">⏻ LOGOUT</button>
+                </div>
+            </nav>
+
+            <div class="dashboard-grid">
+                <div class="left-panel">
+                    <div class="panel-title">📊 Operations Overview</div>
+                    <div class="metrics-grid">
+                        <div class="metric-card">
+                            <div class="metric-value" id="metricTotal">0</div>
+                            <div class="metric-label">Total Units</div>
+                        </div>
+                        <div class="metric-card">
+                            <div class="metric-value" id="metricAvgEta">0</div>
+                            <div class="metric-label">Avg ETA (m)</div>
+                        </div>
+                    </div>
+
+                    <div class="panel-title" style="margin-top: 25px;">🚑 Active Units</div>
+                    <div id="unitList" class="unit-list"></div>
+
+                    <div class="panel-title" style="margin-top: 25px;">🔴 Priority Incidents</div>
+                    <div id="incidentList" class="incident-list"></div>
+
+                    <div class="panel-title" style="margin-top: 25px;">📜 Event Log</div>
+                    <div class="filter-bar">
+                        <div class="filter-chip active" data-filter="all">ALL</div>
+                        <div class="filter-chip" data-filter="alert">ALERTS</div>
+                        <div class="filter-chip" data-filter="dispatch">DISPATCH</div>
+                    </div>
+                    <div id="eventFeed" class="event-feed"></div>
+                </div>
+                <div class="map-area">
+                    <div class="map-top-bar">
+                        <div style="display: flex;">
+                            <input type="text" id="mapSearch" class="map-search" placeholder="Search location...">
+                            <button class="map-btn" id="searchBtn" style="border-left: 1px solid rgba(0,240,255,0.3);">🔍</button>
+                        </div>
+                        <div class="map-btn-group">
+                            <button class="map-btn active" id="streetViewBtn">STREET</button>
+                            <button class="map-btn" id="satViewBtn">SATELLITE</button>
+                        </div>
+                    </div>
+                    
+                    <div class="map-overlay" style="top: auto; bottom: 80px; left: auto; right: 15px;">
+                        <div class="map-stats" style="flex-direction: column;">
+                            <div class="map-stat">
+                                <div class="map-stat-value" id="mapIncidents">0</div>
+                                <div class="map-stat-label">Incidents</div>
+                            </div>
+                            <div class="map-stat">
+                                <div class="map-stat-value" id="mapAmbulances">0</div>
+                                <div class="map-stat-label">Ambulances</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="map-bottom-bar">
+                        <button class="action-btn" id="recenterBtn">
+                            <span style="color: #ffaa00;">♦</span> RECENTER
+                        </button>
+                        <button class="action-btn btn-warning" id="simIncidentBtn">
+                            <span>⚠️</span> SIMULATE INCIDENT
+                        </button>
+                        <div id="mapCoords" style="color: #666; font-family: 'Share Tech Mono'; font-size: 12px; display: flex; align-items: center; margin-left: 20px;">0.0000, 0.0000</div>
+                    </div>
+
+                    <div id="mainMap"></div>
+                </div>
             </div>
         </div>
-        <div class="nav-center">
-            <div class="nav-stat">
-                <span class="ns-value" id="navIncidents">0</span>
-                <span class="ns-label">INCIDENTS</span>
-            </div>
-            <div class="nav-stat">
-                <span class="ns-value" id="navDeployed">0</span>
-                <span class="ns-label">DEPLOYED</span>
-            </div>
-            <div class="nav-stat">
-                <span class="ns-value" id="navEta">0.0</span>
-                <span class="ns-label">AVG ETA</span>
-            </div>
-            <div class="nav-stat">
-                <span class="ns-value" id="navBeds">0</span>
-                <span class="ns-label">BEDS AVAIL</span>
-            </div>
-            <div class="nav-stat">
-                <span class="ns-value" id="navUptime">99.9%</span>
-                <span class="ns-label">UPTIME</span>
-            </div>
-        </div>
-        <div class="nav-right">
-            <div class="nav-clock" id="navClock">00:00:00</div>
-            <div class="nav-user">
-                <span class="user-role" id="userRole">COMMAND</span>
-                <span class="user-name" id="userName">admin</span>
-            </div>
-            <div class="nav-avatar" id="navAvatar">A</div>
-            <button class="logout-btn" id="logoutBtn">⏻ LOGOUT</button>
-        </div>
-    </nav>
-
-    <!-- MAIN CONTENT — 3 COLUMN LAYOUT -->
-    <div class="dashboard-content">
-
-        <!-- LEFT SIDEBAR -->
-        <aside class="sidebar-left">
-            <!-- Active Mission -->
-            <div class="panel" id="missionPanel">
-                <div class="panel-header">
-                    <span class="ph-icon">⚠</span>
-                    <span class="ph-title">ACTIVE MISSION</span>
-                    <span class="ph-badge pulse-red">LIVE</span>
-                </div>
-                <div class="mission-content" id="missionContent">
-                    <p class="no-mission">No active incidents. System standby.</p>
-                </div>
-            </div>
-
-            <!-- AI Intelligence Panel -->
-            <div class="panel ai-panel">
-                <div class="panel-header">
-                    <span class="ph-icon">🧠</span>
-                    <span class="ph-title">AI INTELLIGENCE</span>
-                    <span class="ph-badge pulse-purple">ACTIVE</span>
-                </div>
-                <div class="ai-content" id="aiContent">
-                    <p class="no-mission">Awaiting incident data for analysis...</p>
-                </div>
-            </div>
-
-            <!-- Routing Options -->
-            <div class="panel">
-                <div class="panel-header">
-                    <span class="ph-icon">🏥</span>
-                    <span class="ph-title">ROUTING OPTIONS</span>
-                </div>
-                <div class="routing-options" id="routingOptions">
-                    <p class="no-mission">Awaiting routing analysis...</p>
-                </div>
-            </div>
-
-            <!-- Unit Status -->
-            <div class="panel">
-                <div class="panel-header">
-                    <span class="ph-icon">🚑</span>
-                    <span class="ph-title">UNIT STATUS</span>
-                </div>
-                <div class="unit-list" id="unitList"></div>
-            </div>
-
-            <!-- Bottom Metrics -->
-            <div class="metrics-grid" id="metricsGrid">
-                <div class="metric-card">
-                    <div class="metric-value" id="metricTotal">5</div>
-                    <div class="metric-label">TOTAL UNITS</div>
-                    <div class="metric-trend trend-up">↑ Online</div>
-                </div>
-                <div class="metric-card">
-                    <div class="metric-value" id="metricHospitals">7</div>
-                    <div class="metric-label">HOSPITALS</div>
-                    <div class="metric-trend trend-up">↑ Active</div>
-                </div>
-                <div class="metric-card">
-                    <div class="metric-value" id="metricResolved">0</div>
-                    <div class="metric-label">RESOLVED</div>
-                    <div class="metric-trend trend-up">↑ 0%</div>
-                </div>
-                <div class="metric-card">
-                    <div class="metric-value" id="metricAvgEta">0.0</div>
-                    <div class="metric-label">AVG ETA (MIN)</div>
-                    <div class="metric-trend trend-down">— N/A</div>
-                </div>
-            </div>
-        </aside>
-
-        <!-- CENTER MAP -->
-        <main class="map-section">
-            <!-- Map Overlay Top -->
-            <div class="map-overlay-top">
-                <div class="map-live-badge">
-                    <div class="live-dot"></div>
-                    LIVE
-                </div>
-                <span class="map-title">OPERATIONAL MAP — DELHI NCR</span>
-                <div class="search-container">
-                    <input type="text" id="mapSearch" placeholder="Search location..." class="map-search-input">
-                    <button id="searchBtn" class="map-search-btn">⌕</button>
-                </div>
-                <div style="display:flex;gap:4px;">
-                    <button class="map-ctrl-btn active" id="streetViewBtn">STREET</button>
-                    <button class="map-ctrl-btn" id="satViewBtn">SATELLITE</button>
-                </div>
-                <span class="map-coords" id="mapCoords">28.5800, 77.2200</span>
-            </div>
-
-            <div id="map" class="map-container"></div>
-
-            <!-- Map Controls Bottom -->
-            <div class="map-toolbar">
-                <button class="map-ctrl-btn" id="recenterBtn">⊕ RECENTER</button>
-                <button class="map-ctrl-btn sim-btn" id="simIncidentBtn">⚡ SIMULATE INCIDENT</button>
-            </div>
-        </main>
-
-        <!-- RIGHT SIDEBAR -->
-        <aside class="sidebar-right">
-            <!-- Hospital Matrix -->
-            <div class="panel">
-                <div class="panel-header">
-                    <span class="ph-icon">🏥</span>
-                    <span class="ph-title">HOSPITAL MATRIX</span>
-                </div>
-                <div class="sort-toggle">
-                    <button class="sort-btn active" data-sort="beds">BEDS</button>
-                    <button class="sort-btn" data-sort="name">NAME</button>
-                </div>
-                <div class="hospital-matrix" id="hospitalMatrix"></div>
-            </div>
-
-            <!-- Live Event Feed -->
-            <div class="panel event-panel">
-                <div class="panel-header">
-                    <span class="ph-icon">📡</span>
-                    <span class="ph-title">EVENT FEED</span>
-                    <span class="ph-badge pulse-cyan">STREAM</span>
-                </div>
-                <div class="event-filters">
-                    <button class="filter-chip active" data-filter="all">ALL</button>
-                    <button class="filter-chip" data-filter="system">SYSTEM</button>
-                    <button class="filter-chip" data-filter="dispatch">DISPATCH</button>
-                    <button class="filter-chip" data-filter="alert">ALERTS</button>
-                </div>
-                <div class="event-feed" id="eventFeed"></div>
-            </div>
-
-            <!-- SOS Section -->
-            <div class="sos-section">
-                <button class="sos-btn" id="sosBtn">
-                    🆘 EMERGENCY SOS DISPATCH
-                </button>
-                <div class="quick-actions">
-                    <button class="quick-btn">🚁 HELI</button>
-                    <button class="quick-btn">📞 POLICE</button>
-                    <button class="quick-btn">🔥 FIRE</button>
-                </div>
-                <div class="uptime-counter" id="uptimeCounter">UPTIME: 00:00:00</div>
-            </div>
-        </aside>
     </div>
 
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/sockjs-client@1/dist/sockjs.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/stompjs@2.3.3/lib/stomp.min.js"></script>
-    <script src="/js/dashboard.js"></script>
+    <script src="/js/dashboard.js?v=4"></script>
 </body>
 </html>

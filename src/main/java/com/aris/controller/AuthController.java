@@ -38,12 +38,11 @@ public class AuthController {
                     .body(Map.of("error", "Invalid credentials"));
         }
 
-        // Update last login
         user.setLastLogin(LocalDateTime.now());
         userRepository.save(user);
 
-        String token = jwtService.generateToken(user.getUsername(), user.getRole().name());
+        String token = jwtService.generateToken(user.getUsername(), user.getRole().name(), user.getId());
 
-        return ResponseEntity.ok(new LoginResponse(token, user.getUsername(), user.getRole().name()));
+        return ResponseEntity.ok(new LoginResponse(token, user.getUsername(), user.getRole().name(), user.getId()));
     }
 }

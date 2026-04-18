@@ -1,0 +1,2939 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RESQ — Patient Portal</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;500;600;700;800;900&family=Rajdhani:wght@300;400;500;600;700&family=Share+Tech+Mono&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/sockjs-client/1.5.1/sockjs.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/stomp.js/2.3.3/stomp.min.js"></script>
+    <link rel="stylesheet" href="/css/dashboard.css">
+    <style>
+        .tab-content { display: none; width: 100%; flex: 1; }
+        .tab-content.active { display: flex; flex-direction: column; height: 100%; width: 100%; }
+        .leaflet-popup-tip { background: rgba(10,15,20,0.95); }
+        .popup-title { font-family: 'Orbitron', sans-serif; font-size: 14px; color: #00f0ff; margin-bottom: 5px; }
+        .popup-info { font-size: 12px; color: #888; }
+        .popup-beds { color: #00ff88; font-weight: 600; }
+        .connection-status { position: fixed; bottom: 20px; right: 20px; padding: 8px 15px; border-radius: 20px; font-size: 12px; font-weight: 600; z-index: 10000; }
+        .connection-status.connected { background: rgba(0,255,136,0.2); color: #00ff88; border: 1px solid rgba(0,255,136,0.5); }
+        .connection-status.disconnected { background: rgba(255,68,68,0.2); color: #ff4444; border: 1px solid rgba(255,68,68,0.5); }
+        @keyframes pulse { 0%, 100% { transform: scale(1); opacity: 1; } 50% { transform: scale(1.1); opacity: 0.8; } }
+        .ambulance-marker-icon { font-size: 30px; text-shadow: 0 0 10px rgba(0,240,255,0.5); }
+        .hidden { display: none !important; }
+        
+        /* Map Panel from Command Center */
+        .dashboard-content { flex: 1; height: calc(100vh - 80px); padding: 0; position: relative; width: 100%; overflow: hidden; display: flex; flex-direction: column; }
+        .map-section { flex: 1; width: 100%; height: 100%; border: none; border-radius: 0; position: relative; overflow: hidden; }
+        #patientMap { width: 100% !important; height: 100% !important; background: #010608; }
+        
+        .status-timeline { position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%); background: rgba(10,15,20,0.95); border: 1px solid rgba(0,240,255,0.3); border-radius: 16px; padding: 18px 32px; display: flex; gap: 36px; z-index: 1000; backdrop-filter: blur(16px); box-shadow: 0 0 30px rgba(0,240,255,0.08); }
+
+        /* ── Inactive step ── */
+        .timeline-step { display: flex; flex-direction: column; align-items: center; position: relative; z-index: 1; opacity: 0.4; transition: opacity 0.4s, transform 0.4s; }
+
+        /* ── Completed step ── */
+        .timeline-step.completed { opacity: 0.85; }
+        .timeline-step.completed .step-icon { background: rgba(0,255,136,0.15); border-color: #00ff88; box-shadow: 0 0 12px rgba(0,255,136,0.5); }
+        .timeline-step.completed .step-label { color: #00ff88; }
+
+        /* ── Active (current) step ── */
+        .timeline-step.active { opacity: 1; transform: translateY(-4px); }
+        .timeline-step.active .step-icon {
+            background: rgba(0,240,255,0.2);
+            border-color: #00f0ff;
+            animation: stepGlow 1.4s ease-in-out infinite;
+        }
+        .timeline-step.active .step-label { color: #00f0ff; font-weight: 700; }
+
+        /* Each step gets its own glow colour based on position */
+        #step-requested.active  .step-icon { animation: stepGlowRed 1.4s ease-in-out infinite; }
+        #step-dispatched.active .step-icon { animation: stepGlowYellow 1.4s ease-in-out infinite; }
+        #step-en-route.active   .step-icon { animation: stepGlowOrange 1.4s ease-in-out infinite; }
+        #step-arrived.active    .step-icon { animation: stepGlowCyan 1.4s ease-in-out infinite; }
+        #step-transit.active    .step-icon { animation: stepGlowGreen 1.4s ease-in-out infinite; }
+
+        @keyframes stepGlowRed    { 0%,100%{ box-shadow:0 0 8px  rgba(255,0,68,0.5);  border-color:#ff0044; } 50%{ box-shadow:0 0 28px rgba(255,0,68,1);    border-color:#ff4477; } }
+        @keyframes stepGlowYellow { 0%,100%{ box-shadow:0 0 8px  rgba(255,210,0,0.5);  border-color:#ffd600; } 50%{ box-shadow:0 0 28px rgba(255,210,0,1);    border-color:#ffe033; } }
+        @keyframes stepGlowOrange { 0%,100%{ box-shadow:0 0 8px  rgba(255,140,0,0.5);  border-color:#ff8c00; } 50%{ box-shadow:0 0 28px rgba(255,140,0,1);    border-color:#ffaa33; } }
+        @keyframes stepGlowCyan   { 0%,100%{ box-shadow:0 0 8px  rgba(0,240,255,0.5);  border-color:#00f0ff; } 50%{ box-shadow:0 0 28px rgba(0,240,255,1);    border-color:#44f8ff; } }
+        @keyframes stepGlowGreen  { 0%,100%{ box-shadow:0 0 8px  rgba(0,255,136,0.5);  border-color:#00ff88; } 50%{ box-shadow:0 0 28px rgba(0,255,136,1);    border-color:#44ffaa; } }
+
+        .step-icon { width: 44px; height: 44px; border-radius: 50%; background: rgba(0,0,0,0.5); border: 2px solid #333; display: flex; align-items: center; justify-content: center; font-size: 18px; margin-bottom: 8px; transition: all 0.4s; }
+        .step-label { font-family: 'Orbitron', sans-serif; font-size: 10px; color: #888; text-transform: uppercase; letter-spacing: 1px; transition: color 0.4s; }
+        
+        .incident-details-card { position: absolute; top: 20px; right: 20px; background: rgba(10,15,20,0.95); border: 1px solid rgba(0,240,255,0.3); border-radius: 12px; padding: 20px; width: 300px; z-index: 1000; backdrop-filter: blur(10px); }
+        .detail-row { display: flex; justify-content: space-between; margin-bottom: 15px; padding-bottom: 15px; border-bottom: 1px solid rgba(255,255,255,0.1); }
+        .detail-row:last-child { border-bottom: none; margin-bottom: 0; padding-bottom: 0; }
+        .detail-label { font-family: 'Rajdhani', sans-serif; font-size: 12px; color: #888; text-transform: uppercase; }
+        .detail-value { font-family: 'Orbitron', sans-serif; font-size: 14px; color: #00f0ff; text-align: right; }
+
+        .telemetry-overlay { position: absolute; bottom: 100px; left: 20px; background: rgba(10,15,20,0.8); border: 1px solid rgba(0,240,255,0.2); border-radius: 8px; padding: 10px; z-index: 1000; font-family: 'Share Tech Mono', monospace; font-size: 10px; color: #00f0ff; min-width: 120px; }
+        .telemetry-row { display: flex; justify-content: space-between; margin-bottom: 4px; }
+        .telemetry-val { color: #fff; }
+        .pulse-marker { animation: markerPulse 2s infinite; }
+        @keyframes markerPulse { 0% { transform: scale(1); opacity: 1; } 50% { transform: scale(1.3); opacity: 0.7; } 100% { transform: scale(1); opacity: 1; } }
+    
+        
+        .incidents-container {
+            display: grid;
+            grid-template-columns: 1fr 400px;
+            gap: 20px;
+            padding: 20px;
+            height: calc(100vh - 80px);
+        }
+
+        .map-panel {
+            background: rgba(10,15,20,0.9);
+            border: 1px solid rgba(0,240,255,0.2);
+            border-radius: 12px;
+            overflow: hidden;
+            position: relative;
+            height: 100%; /* Ensure container has height */
+            min-height: 400px;
+        }
+
+        .map-header {
+            padding: 15px 20px;
+            background: rgba(0,0,0,0.5);
+            border-bottom: 1px solid rgba(0,240,255,0.2);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .map-title {
+            font-family: 'Orbitron', sans-serif;
+            font-size: 14px;
+            color: #00f0ff;
+            text-transform: uppercase;
+        }
+
+        .location-mode {
+            display: flex;
+            gap: 10px;
+        }
+
+        .location-mode-btn {
+            background: rgba(0,0,0,0.3);
+            border: 1px solid rgba(0,240,255,0.2);
+            border-radius: 4px;
+            padding: 6px 12px;
+            color: #888;
+            font-family: 'Rajdhani', sans-serif;
+            font-size: 12px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .location-mode-btn:hover, .location-mode-btn.active {
+            background: rgba(0,240,255,0.1);
+            border-color: #00f0ff;
+            color: #00f0ff;
+        }
+
+        #incidentMap {
+            width: 100%;
+            height: calc(100% - 60px);
+            background: #010608;
+        }
+
+        .sos-panel {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+            height: 100%;
+        }
+
+        .sos-button-container {
+            text-align: center;
+            padding: 30px;
+            background: linear-gradient(180deg, rgba(255,0,68,0.1) 0%, rgba(0,0,0,0.3) 100%);
+            border: 2px solid rgba(255,0,68,0.3);
+            border-radius: 12px;
+        }
+
+        .sos-btn {
+            width: 160px;
+            height: 160px;
+            border-radius: 50%;
+            background: radial-gradient(circle at 30% 30%, #ff3366, #cc0044);
+            border: 4px solid #ff0044;
+            color: white;
+            font-family: 'Orbitron', sans-serif;
+            font-size: 18px;
+            font-weight: 700;
+            cursor: pointer;
+            box-shadow: 0 0 40px rgba(255,0,68,0.5), inset 0 0 20px rgba(0,0,0,0.3);
+            transition: all 0.3s ease;
+            animation: sosPulse 2s infinite;
+            position: relative;
+        }
+
+        @keyframes sosPulse {
+            0%, 100% { box-shadow: 0 0 40px rgba(255,0,68,0.5); }
+            50% { box-shadow: 0 0 80px rgba(255,0,68,0.8); }
+        }
+
+        .sos-btn:hover {
+            transform: scale(1.05);
+            box-shadow: 0 0 60px rgba(255,0,68,0.7);
+        }
+
+        .sos-btn:active {
+            transform: scale(0.95);
+        }
+
+        .sos-label {
+            margin-top: 15px;
+            font-family: 'Rajdhani', sans-serif;
+            font-size: 14px;
+            color: #ff4444;
+            text-transform: uppercase;
+        }
+
+        .location-status {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 10px 15px;
+            background: rgba(0,0,0,0.3);
+            border-radius: 8px;
+            margin-top: 15px;
+        }
+
+        .location-indicator {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background: #888;
+        }
+
+        .location-indicator.active {
+            background: #00ff88;
+            animation: locPulse 1s infinite;
+        }
+
+        @keyframes locPulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        .location-text {
+            font-family: 'Share Tech Mono', monospace;
+            font-size: 12px;
+            color: #888;
+        }
+
+        .report-form {
+            flex: 1;
+            background: rgba(10,15,20,0.9);
+            border: 1px solid rgba(0,240,255,0.2);
+            border-radius: 12px;
+            padding: 20px;
+            overflow-y: auto;
+        }
+
+        .form-title {
+            font-family: 'Orbitron', sans-serif;
+            font-size: 14px;
+            color: #00f0ff;
+            text-transform: uppercase;
+            margin-bottom: 20px;
+            padding-bottom: 10px;
+            border-bottom: 1px solid rgba(0,240,255,0.2);
+        }
+
+        .form-group {
+            margin-bottom: 15px;
+        }
+
+        .form-label {
+            display: block;
+            font-family: 'Rajdhani', sans-serif;
+            font-size: 12px;
+            color: #888;
+            text-transform: uppercase;
+            margin-bottom: 6px;
+        }
+
+        .form-input, .form-select, .form-textarea {
+            width: 100%;
+            padding: 10px 12px;
+            background: rgba(0,0,0,0.3);
+            border: 1px solid rgba(0,240,255,0.2);
+            border-radius: 6px;
+            color: #fff;
+            font-family: 'Rajdhani', sans-serif;
+            font-size: 14px;
+            transition: border-color 0.2s ease;
+        }
+
+        .form-input:focus, .form-select:focus, .form-textarea:focus {
+            outline: none;
+            border-color: #00f0ff;
+        }
+
+        .form-textarea {
+            resize: vertical;
+            min-height: 80px;
+        }
+
+        .form-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+        }
+
+        .severity-options {
+            display: flex;
+            gap: 10px;
+        }
+
+        .severity-btn {
+            flex: 1;
+            padding: 10px;
+            border: 1px solid rgba(255,255,255,0.2);
+            border-radius: 6px;
+            background: rgba(0,0,0,0.3);
+            color: #888;
+            font-family: 'Rajdhani', sans-serif;
+            font-size: 12px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .severity-btn:hover, .severity-btn.active {
+            border-color: #00f0ff;
+            color: #00f0ff;
+        }
+
+        .severity-btn.low { border-color: #00ff88; color: #00ff88; }
+        .severity-btn.moderate { border-color: #ffaa00; color: #ffaa00; }
+        .severity-btn.high { border-color: #ff6644; color: #ff6644; }
+        .severity-btn.critical { border-color: #ff0044; color: #ff0044; }
+
+        .submit-btn {
+            width: 100%;
+            padding: 15px;
+            background: linear-gradient(180deg, rgba(0,240,255,0.2) 0%, rgba(0,240,255,0.1) 100%);
+            border: 1px solid rgba(0,240,255,0.3);
+            border-radius: 8px;
+            color: #00f0ff;
+            font-family: 'Orbitron', sans-serif;
+            font-size: 14px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            margin-top: 10px;
+        }
+
+        .submit-btn:hover {
+            background: linear-gradient(180deg, rgba(0,240,255,0.3) 0%, rgba(0,240,255,0.2) 100%);
+            border-color: #00f0ff;
+        }
+
+        .recent-incidents {
+            margin-top: 15px;
+        }
+
+        .incident-item {
+            background: rgba(0,0,0,0.3);
+            border-radius: 8px;
+            padding: 12px;
+            margin-bottom: 10px;
+            border-left: 3px solid #00f0ff;
+        }
+
+        .incident-item.high-priority { border-left-color: #ff0044; }
+        .incident-item.medium-priority { border-left-color: #ffaa00; }
+
+        .incident-header {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 6px;
+        }
+
+        .incident-type {
+            font-family: 'Orbitron', sans-serif;
+            font-size: 12px;
+            color: #fff;
+        }
+
+        .incident-time {
+            font-family: 'Share Tech Mono', monospace;
+            font-size: 11px;
+            color: #666;
+        }
+
+        .incident-location {
+            font-family: 'Rajdhani', sans-serif;
+            font-size: 13px;
+            color: #888;
+        }
+
+        .sos-modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0,0,0,0.9);
+            z-index: 1000;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .sos-modal.active {
+            display: flex;
+        }
+
+        .sos-modal-content {
+            text-align: center;
+            padding: 60px;
+        }
+
+        .sos-modal-title {
+            font-family: 'Orbitron', sans-serif;
+            font-size: 48px;
+            color: #ff0044;
+            margin-bottom: 20px;
+            animation: sosBlink 0.5s infinite;
+        }
+
+        @keyframes sosBlink {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.3; }
+        }
+
+        .sos-modal-text {
+            font-family: 'Rajdhani', sans-serif;
+            font-size: 18px;
+            color: #fff;
+            margin-bottom: 30px;
+        }
+
+        .sos-modal-actions {
+            display: flex;
+            gap: 20px;
+            justify-content: center;
+        }
+
+        .sos-action-btn {
+            padding: 15px 40px;
+            border-radius: 8px;
+            font-family: 'Rajdhani', sans-serif;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .sos-action-btn.cancel {
+            background: rgba(255,255,255,0.1);
+            border: 1px solid rgba(255,255,255,0.3);
+            color: #fff;
+        }
+
+        .sos-action-btn.confirm {
+            background: rgba(255,0,68,0.3);
+            border: 2px solid #ff0044;
+            color: #ff0044;
+        }
+
+        .sos-action-btn:hover {
+            transform: scale(1.05);
+        }
+    
+        
+        .hospitals-container {
+            padding: 20px;
+            height: calc(100vh - 80px);
+            overflow-y: auto;
+        }
+        
+        .hospitals-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 24px;
+        }
+        
+        .hospitals-title {
+            font-family: 'Orbitron', sans-serif;
+            font-size: 24px;
+            color: #00f0ff;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+        }
+        
+        .hospitals-stats {
+            display: flex;
+            gap: 20px;
+        }
+        
+        .hospital-stat-card {
+            background: linear-gradient(135deg, rgba(0,240,255,0.1) 0%, rgba(0,0,0,0.3) 100%);
+            border: 1px solid rgba(0,240,255,0.3);
+            border-radius: 8px;
+            padding: 12px 20px;
+            text-align: center;
+        }
+        
+        .hospital-stat-value {
+            font-family: 'Orbitron', sans-serif;
+            font-size: 28px;
+            color: #00f0ff;
+        }
+        
+        .hospital-stat-label {
+            font-family: 'Rajdhani', sans-serif;
+            font-size: 12px;
+            color: #888;
+            text-transform: uppercase;
+        }
+        
+        .hospitals-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+            gap: 20px;
+        }
+        
+        .hospital-card {
+            background: linear-gradient(180deg, rgba(20,30,40,0.9) 0%, rgba(10,15,20,0.95) 100%);
+            border: 1px solid rgba(0,240,255,0.2);
+            border-radius: 12px;
+            padding: 20px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .hospital-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 3px;
+            background: linear-gradient(90deg, transparent, #00f0ff, transparent);
+            opacity: 0;
+            transition: opacity 0.3s ease;
+        }
+        
+        .hospital-card:hover {
+            border-color: #00f0ff;
+            transform: translateY(-4px);
+            box-shadow: 0 10px 40px rgba(0,240,255,0.2);
+        }
+        
+        .hospital-card:hover::before {
+            opacity: 1;
+        }
+        
+        .hospital-card.low-load { border-left: 4px solid #00ff88; }
+        .hospital-card.medium-load { border-left: 4px solid #ffaa00; }
+        .hospital-card.high-load { border-left: 4px solid #ff4444; }
+        .hospital-card.critical-load { border-left: 4px solid #ff0044; animation: criticalPulse 2s infinite; }
+        
+        @keyframes criticalPulse {
+            0%, 100% { box-shadow: 0 0 20px rgba(255,0,68,0.3); }
+            50% { box-shadow: 0 0 40px rgba(255,0,68,0.6); }
+        }
+        
+        .hospital-card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            margin-bottom: 16px;
+        }
+        
+        .hospital-name {
+            font-family: 'Orbitron', sans-serif;
+            font-size: 18px;
+            color: #fff;
+            margin-bottom: 4px;
+        }
+        
+        .hospital-address {
+            font-family: 'Rajdhani', sans-serif;
+            font-size: 13px;
+            color: #888;
+        }
+        
+        .hospital-status-badge {
+            padding: 4px 10px;
+            border-radius: 20px;
+            font-family: 'Rajdhani', sans-serif;
+            font-size: 11px;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+        
+        .status-open {
+            background: rgba(0,255,136,0.2);
+            color: #00ff88;
+            border: 1px solid rgba(0,255,136,0.3);
+        }
+        
+        .status-busy {
+            background: rgba(255,170,0,0.2);
+            color: #ffaa00;
+            border: 1px solid rgba(255,170,0,0.3);
+        }
+        
+        .status-full {
+            background: rgba(255,68,68,0.2);
+            color: #ff4444;
+            border: 1px solid rgba(255,68,68,0.3);
+        }
+        
+        .hospital-metrics {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 12px;
+            margin-bottom: 16px;
+        }
+        
+        .metric-box {
+            background: rgba(0,0,0,0.3);
+            border-radius: 8px;
+            padding: 12px;
+            text-align: center;
+        }
+        
+        .metric-box-value {
+            font-family: 'Orbitron', sans-serif;
+            font-size: 24px;
+            color: #00f0ff;
+        }
+        
+        .metric-box-label {
+            font-family: 'Rajdhani', sans-serif;
+            font-size: 11px;
+            color: #666;
+            text-transform: uppercase;
+            margin-top: 2px;
+        }
+        
+        .workload-bar-container {
+            margin-bottom: 16px;
+        }
+        
+        .workload-bar-label {
+            display: flex;
+            justify-content: space-between;
+            font-family: 'Rajdhani', sans-serif;
+            font-size: 12px;
+            color: #888;
+            margin-bottom: 6px;
+        }
+        
+        .workload-bar {
+            height: 8px;
+            background: rgba(255,255,255,0.1);
+            border-radius: 4px;
+            overflow: hidden;
+        }
+        
+        .workload-bar-fill {
+            height: 100%;
+            border-radius: 4px;
+            transition: width 0.5s ease, background 0.3s ease;
+        }
+        
+        .workload-low { background: linear-gradient(90deg, #00ff88, #00cc66); }
+        .workload-medium { background: linear-gradient(90deg, #ffaa00, #ff8800); }
+        .workload-high { background: linear-gradient(90deg, #ff6644, #ff4444); }
+        .workload-critical { background: linear-gradient(90deg, #ff0044, #cc0033); animation: barPulse 1s infinite; }
+        
+        @keyframes barPulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.6; }
+        }
+        
+        .hospital-specialties {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+        }
+        
+        .specialty-tag {
+            background: rgba(0,240,255,0.1);
+            border: 1px solid rgba(0,240,255,0.2);
+            border-radius: 4px;
+            padding: 4px 8px;
+            font-family: 'Rajdhani', sans-serif;
+            font-size: 11px;
+            color: #00f0ff;
+        }
+        
+        .hospital-card-footer {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-top: 16px;
+            padding-top: 12px;
+            border-top: 1px solid rgba(255,255,255,0.1);
+        }
+        
+        .wait-time {
+            font-family: 'Share Tech Mono', monospace;
+            font-size: 14px;
+            color: #ffaa00;
+        }
+        
+        .contact-btn {
+            background: rgba(0,240,255,0.2);
+            border: 1px solid rgba(0,240,255,0.3);
+            border-radius: 4px;
+            padding: 6px 12px;
+            color: #00f0ff;
+            font-family: 'Rajdhani', sans-serif;
+            font-size: 12px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+        
+        .contact-btn:hover {
+            background: rgba(0,240,255,0.3);
+        }
+        
+        .sort-controls {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+        
+        .sort-btn {
+            background: rgba(0,0,0,0.3);
+            border: 1px solid rgba(0,240,255,0.2);
+            border-radius: 4px;
+            padding: 8px 16px;
+            color: #888;
+            font-family: 'Rajdhani', sans-serif;
+            font-size: 13px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+        
+        .sort-btn:hover, .sort-btn.active {
+            background: rgba(0,240,255,0.1);
+            border-color: #00f0ff;
+            color: #00f0ff;
+        }
+        
+        .hospital-modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0,0,0,0.8);
+            z-index: 1000;
+            justify-content: center;
+            align-items: center;
+        }
+        
+        .hospital-modal.active {
+            display: flex;
+        }
+        
+        .modal-content {
+            background: linear-gradient(180deg, rgba(20,30,40,0.98) 0%, rgba(10,15,20,0.98) 100%);
+            border: 1px solid rgba(0,240,255,0.3);
+            border-radius: 16px;
+            padding: 30px;
+            max-width: 500px;
+            width: 90%;
+            max-height: 80vh;
+            overflow-y: auto;
+        }
+        
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 24px;
+        }
+        
+        .modal-title {
+            font-family: 'Orbitron', sans-serif;
+            font-size: 20px;
+            color: #00f0ff;
+        }
+        
+        .modal-close {
+            background: none;
+            border: none;
+            color: #888;
+            font-size: 24px;
+            cursor: pointer;
+        }
+        
+        .modal-close:hover { color: #fff; }
+        
+        .modal-stats {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 15px;
+            margin-bottom: 24px;
+        }
+        
+        .modal-stat {
+            background: rgba(0,0,0,0.3);
+            border-radius: 8px;
+            padding: 15px;
+            text-align: center;
+        }
+        
+        .modal-stat-value {
+            font-family: 'Orbitron', sans-serif;
+            font-size: 28px;
+            color: #00f0ff;
+        }
+        
+        .modal-stat-label {
+            font-family: 'Rajdhani', sans-serif;
+            font-size: 11px;
+            color: #666;
+            text-transform: uppercase;
+            margin-top: 4px;
+        }
+        
+        .modal-section {
+            margin-bottom: 20px;
+        }
+        
+        .modal-section-title {
+            font-family: 'Rajdhani', sans-serif;
+            font-size: 14px;
+            color: #00f0ff;
+            text-transform: uppercase;
+            margin-bottom: 10px;
+        }
+    
+        
+        .analytics-container {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            padding: 20px;
+            height: calc(100vh - 80px);
+        }
+
+        .analytics-panel {
+            background: rgba(10,15,20,0.9);
+            border: 1px solid rgba(0,240,255,0.2);
+            border-radius: 12px;
+            padding: 20px;
+            overflow-y: auto;
+        }
+
+        .panel-title {
+            font-family: 'Orbitron', sans-serif;
+            font-size: 16px;
+            color: #00f0ff;
+            text-transform: uppercase;
+            margin-bottom: 20px;
+            padding-bottom: 10px;
+            border-bottom: 1px solid rgba(0,240,255,0.2);
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .form-section {
+            margin-bottom: 25px;
+        }
+
+        .section-title {
+            font-family: 'Rajdhani', sans-serif;
+            font-size: 13px;
+            color: #00f0ff;
+            text-transform: uppercase;
+            margin-bottom: 15px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .section-title::before {
+            content: '';
+            width: 3px;
+            height: 14px;
+            background: #00f0ff;
+        }
+
+        .form-row {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 12px;
+            margin-bottom: 12px;
+        }
+
+        .form-row.two-col {
+            grid-template-columns: 1fr 1fr;
+        }
+
+        .form-group {
+            margin-bottom: 12px;
+        }
+
+        .form-label {
+            display: block;
+            font-family: 'Rajdhani', sans-serif;
+            font-size: 11px;
+            color: #666;
+            text-transform: uppercase;
+            margin-bottom: 5px;
+        }
+
+        .form-input, .form-select, .form-textarea {
+            width: 100%;
+            padding: 10px 12px;
+            background: rgba(0,0,0,0.4);
+            border: 1px solid rgba(0,240,255,0.15);
+            border-radius: 6px;
+            color: #fff;
+            font-family: 'Rajdhani', sans-serif;
+            font-size: 14px;
+            transition: all 0.2s ease;
+        }
+
+        .form-input:focus, .form-select:focus, .form-textarea:focus {
+            outline: none;
+            border-color: #00f0ff;
+            box-shadow: 0 0 10px rgba(0,240,255,0.2);
+        }
+
+        .form-input::placeholder {
+            color: #444;
+        }
+
+        .form-textarea {
+            resize: vertical;
+            min-height: 60px;
+        }
+
+        .vitals-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 12px;
+        }
+
+        .vital-card {
+            background: rgba(0,0,0,0.4);
+            border: 1px solid rgba(0,240,255,0.15);
+            border-radius: 8px;
+            padding: 15px;
+            text-align: center;
+        }
+
+        .vital-icon {
+            font-size: 24px;
+            margin-bottom: 8px;
+        }
+
+        .vital-value {
+            font-family: 'Orbitron', sans-serif;
+            font-size: 20px;
+            color: #00f0ff;
+        }
+
+        .vital-label {
+            font-family: 'Rajdhani', sans-serif;
+            font-size: 11px;
+            color: #666;
+            text-transform: uppercase;
+        }
+
+        .vital-status {
+            margin-top: 5px;
+            font-size: 10px;
+            padding: 2px 6px;
+            border-radius: 3px;
+            display: inline-block;
+        }
+
+        .vital-normal { background: rgba(0,255,136,0.2); color: #00ff88; }
+        .vital-warning { background: rgba(255,170,0,0.2); color: #ffaa00; }
+        .vital-critical { background: rgba(255,0,68,0.2); color: #ff0044; }
+
+        .checkbox-group {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin: 10px 0;
+        }
+
+        .checkbox-group input[type="checkbox"] {
+            width: 18px;
+            height: 18px;
+            accent-color: #00f0ff;
+        }
+
+        .checkbox-group label {
+            font-family: 'Rajdhani', sans-serif;
+            font-size: 13px;
+            color: #888;
+        }
+
+        .submit-section {
+            display: flex;
+            gap: 12px;
+            margin-top: 20px;
+        }
+
+        .submit-btn {
+            flex: 1;
+            padding: 14px;
+            border-radius: 8px;
+            font-family: 'Orbitron', sans-serif;
+            font-size: 13px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .submit-btn.primary {
+            background: linear-gradient(180deg, rgba(0,240,255,0.3) 0%, rgba(0,240,255,0.1) 100%);
+            border: 1px solid rgba(0,240,255,0.3);
+            color: #00f0ff;
+        }
+
+        .submit-btn.secondary {
+            background: rgba(0,0,0,0.3);
+            border: 1px solid rgba(255,255,255,0.2);
+            color: #888;
+        }
+
+        .submit-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 20px rgba(0,240,255,0.3);
+        }
+
+        .logs-panel {
+            height: calc(100% - 100px);
+        }
+
+        .logs-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+        }
+
+        .filter-tabs {
+            display: flex;
+            gap: 8px;
+        }
+
+        .filter-tab {
+            padding: 6px 12px;
+            background: rgba(0,0,0,0.3);
+            border: 1px solid rgba(0,240,255,0.15);
+            border-radius: 4px;
+            color: #666;
+            font-family: 'Rajdhani', sans-serif;
+            font-size: 11px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .filter-tab:hover, .filter-tab.active {
+            background: rgba(0,240,255,0.1);
+            border-color: #00f0ff;
+            color: #00f0ff;
+        }
+
+        .logs-list {
+            height: calc(100% - 50px);
+            overflow-y: auto;
+        }
+
+        .log-entry {
+            background: rgba(0,0,0,0.3);
+            border-radius: 8px;
+            padding: 15px;
+            margin-bottom: 12px;
+            border-left: 3px solid #00f0ff;
+            animation: slideIn 0.3s ease;
+        }
+
+        @keyframes slideIn {
+            from { opacity: 0; transform: translateX(-20px); }
+            to { opacity: 1; transform: translateX(0); }
+        }
+
+        .log-entry.emergency { border-left-color: #ff0044; }
+        .log-entry.warning { border-left-color: #ffaa00; }
+        .log-entry.info { border-left-color: #00f0ff; }
+
+        .log-header {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 8px;
+        }
+
+        .log-type {
+            font-family: 'Orbitron', sans-serif;
+            font-size: 12px;
+            color: #fff;
+        }
+
+        .log-time {
+            font-family: 'Share Tech Mono', monospace;
+            font-size: 11px;
+            color: #666;
+        }
+
+        .log-patient {
+            font-family: 'Rajdhani', sans-serif;
+            font-size: 14px;
+            color: #00f0ff;
+            margin-bottom: 5px;
+        }
+
+        .log-details {
+            font-family: 'Rajdhani', sans-serif;
+            font-size: 13px;
+            color: #888;
+            line-height: 1.5;
+        }
+
+        .log-vitals {
+            display: flex;
+            gap: 15px;
+            margin-top: 10px;
+            padding-top: 10px;
+            border-top: 1px solid rgba(255,255,255,0.1);
+        }
+
+        .log-vital {
+            font-family: 'Share Tech Mono', monospace;
+            font-size: 12px;
+            color: #666;
+        }
+
+        .log-vital span {
+            color: #00f0ff;
+        }
+
+        .share-status {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 12px 15px;
+            background: rgba(0,0,0,0.3);
+            border-radius: 8px;
+            margin-bottom: 15px;
+        }
+
+        .share-indicator {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background: #00ff88;
+            animation: sharePulse 2s infinite;
+        }
+
+        @keyframes sharePulse {
+            0%, 100% { box-shadow: 0 0 5px rgba(0,255,136,0.5); }
+            50% { box-shadow: 0 0 15px rgba(0,255,136,0.8); }
+        }
+
+        .share-text {
+            font-family: 'Rajdhani', sans-serif;
+            font-size: 13px;
+            color: #00ff88;
+        }
+
+        .hospital-selector {
+            margin-bottom: 15px;
+        }
+
+        .hospital-preview {
+            background: rgba(0,240,255,0.1);
+            border: 1px solid rgba(0,240,255,0.2);
+            border-radius: 8px;
+            padding: 12px;
+            margin-bottom: 15px;
+        }
+
+        .hospital-preview-title {
+            font-family: 'Rajdhani', sans-serif;
+            font-size: 12px;
+            color: #666;
+            margin-bottom: 5px;
+        }
+
+        .hospital-preview-name {
+            font-family: 'Orbitron', sans-serif;
+            font-size: 14px;
+            color: #00f0ff;
+        }
+
+        .clear-btn {
+            background: rgba(255,0,68,0.1);
+            border: 1px solid rgba(255,0,68,0.3);
+            color: #ff4444;
+            padding: 8px 16px;
+            border-radius: 4px;
+            font-family: 'Rajdhani', sans-serif;
+            font-size: 12px;
+            cursor: pointer;
+            margin-left: auto;
+        }
+
+        .clear-btn:hover {
+            background: rgba(255,0,68,0.2);
+        }
+    
+</style>
+</head>
+<body>
+    <div class="app-wrapper">
+        <nav class="vertical-nav">
+            <div class="vnav-brand"><div class="vbrand-icon">R</div></div>
+            <div class="vnav-items">
+                <a href="#" class="vnav-btn" data-tab="track" title="Command Map"><span class="vnav-icon">🗺️</span></a>
+                <a href="#" class="vnav-btn" data-tab="hospitalsTab" title="Hospitals"><span class="vnav-icon">🏥</span></a>
+                <a href="#" class="vnav-btn active" data-tab="request" title="Incidents"><span class="vnav-icon">🔴</span></a>
+                <a href="#" class="vnav-btn" data-tab="profile" title="Analytics"><span class="vnav-icon">📊</span></a>
+            </div>
+            <div class="vnav-bottom">
+                <button class="vnav-btn logout-vbtn" id="vLogoutBtn" title="Logout"><span class="vnav-icon">⏻</span></button>
+            </div>
+        </nav>
+
+        <div class="main-content">
+            <nav class="top-nav">
+                <div class="nav-left">
+                    <div class="nav-brand">
+                        <div class="brand-icon">R</div>
+                        <span class="brand-name">RESQ</span>
+                    </div>
+                    <div class="nav-divider"></div>
+                    <span class="nav-subtitle">PATIENT PORTAL</span>
+                </div>
+                <div class="nav-center">
+                    <div class="nav-stat">
+                        <span class="ns-value" id="activeIncidentsTop">0</span>
+                        <span class="ns-label">ACTIVE SOS</span>
+                    </div>
+                </div>
+                <div class="nav-right">
+                    <div class="nav-clock" id="navClock">00:00:00</div>
+                    <div class="nav-user">
+                        <span class="user-role">PATIENT</span>
+                        <span class="user-name" id="userName">patient</span>
+                    </div>
+                    <div class="nav-avatar">P</div>
+                    <button class="logout-btn" id="logoutBtn">⏻ LOGOUT</button>
+                </div>
+            </nav>
+
+            <div id="connectionStatus" class="connection-status disconnected">⚡ WebSocket: Connecting...</div>
+
+            <div id="trackTab" class="tab-content">
+                <div class="dashboard-content">
+                    <div class="map-section" id="trackingPanel">
+                        <div id="patientMap"></div>
+                        <div class="telemetry-overlay">
+                            <div class="telemetry-row"><span>FLEET ACTIVE:</span> <span class="telemetry-val" id="diagFleet">0</span></div>
+                            <div class="telemetry-row"><span>HOSPITALS:</span> <span class="telemetry-val" id="diagHosp">0</span></div>
+                            <div class="telemetry-row"><span>LATENCY:</span> <span class="telemetry-val">12ms</span></div>
+                        </div>
+                        <div class="incident-details-card">
+                            <div class="detail-row">
+                                <div class="detail-label">Ambulance</div>
+                                <div class="detail-value" id="ambCode">--</div>
+                            </div>
+                            <div class="detail-row">
+                                <div class="detail-label">Status</div>
+                                <div class="detail-value" id="ambDriver" style="color: #00ff88;">Waiting for dispatch...</div>
+                            </div>
+                            <div class="detail-row">
+                                <div class="detail-label">ETA</div>
+                                <div class="detail-value" style="color: #ffaa00;"><span id="etaValue">--</span> min</div>
+                            </div>
+                        </div>
+                        <div class="status-timeline">
+                            <div class="timeline-step" id="step-requested">
+                                <div class="step-icon">🚨</div>
+                                <div class="step-label">Requested</div>
+                            </div>
+                            <div class="timeline-step" id="step-dispatched">
+                                <div class="step-icon">📡</div>
+                                <div class="step-label">Dispatched</div>
+                            </div>
+                            <div class="timeline-step" id="step-en-route">
+                                <div class="step-icon">🚑</div>
+                                <div class="step-label">En Route</div>
+                            </div>
+                            <div class="timeline-step" id="step-arrived">
+                                <div class="step-icon">📍</div>
+                                <div class="step-label">Arrived</div>
+                            </div>
+                            <div class="timeline-step" id="step-transit">
+                                <div class="step-icon">🏥</div>
+                                <div class="step-label">To Hospital</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- WILL INJECT INCIDENTS / HOSPITALS / ANALYTICS HTML HERE -->
+            
+            <div id="requestTab" class="tab-content active">
+                <div class="incidents-container">
+                    
+                <div class="map-panel">
+                    <div class="map-header">
+                        <span class="map-title">Select Location</span>
+                        <div class="location-mode">
+                            <button class="location-mode-btn active" id="autoLocationBtn" onclick="setLocationMode('auto')">
+                                📍 Auto Detect
+                            </button>
+                            <button class="location-mode-btn" id="manualLocationBtn" onclick="setLocationMode('manual')">
+                                ✋ Manual Select
+                            </button>
+                        </div>
+                    </div>
+                    <div id="incidentMap"></div>
+                </div>
+
+                <div class="sos-panel">
+                    <div class="sos-button-container">
+                        <button class="sos-btn" id="mainSosBtn" onclick="triggerSOS()">
+                            SOS<br>EMERGENCY
+                        </button>
+                        <div class="sos-label">Tap to dispatch emergency response</div>
+                        <div class="location-status">
+                            <div class="location-indicator" id="locationIndicator"></div>
+                            <span class="location-text" id="locationText">Location: Detecting...</span>
+                        </div>
+                    </div>
+
+                    <div class="report-form">
+                        <div class="form-title">Report New Incident</div>
+                        <form id="incidentForm">
+                            <div class="form-group">
+                                <label class="form-label">Emergency Type</label>
+                                <select class="form-select" id="emergencyType" required>
+                                    <option value="">Select type...</option>
+                                    <option value="MEDICAL">Medical Emergency</option>
+                                    <option value="ACCIDENT">Road Accident</option>
+                                    <option value="FIRE">Fire Emergency</option>
+                                    <option value="CRIME">Crime/Assault</option>
+                                    <option value="OTHER">Other</option>
+                                </select>
+                            </div>
+
+                            <div class="form-group">
+                                <label class="form-label">Severity</label>
+                                <div class="severity-options">
+                                    <button type="button" class="severity-btn low" data-severity="LOW">LOW</button>
+                                    <button type="button" class="severity-btn moderate active" data-severity="MODERATE">MOD</button>
+                                    <button type="button" class="severity-btn high" data-severity="HIGH">HIGH</button>
+                                    <button type="button" class="severity-btn critical" data-severity="CRITICAL">CRIT</button>
+                                </div>
+                            </div>
+
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label class="form-label">Latitude</label>
+                                    <input type="text" class="form-input" id="latitude" placeholder="28.6139" readonly>
+                                </div>
+                                <div class="form-group">
+                                    <label class="form-label">Longitude</label>
+                                    <input type="text" class="form-input" id="longitude" placeholder="77.2090" readonly>
+                                </div>
+                            </div>
+
+                            <div class="form-group">
+                                <label class="form-label">Location Description</label>
+                                <input type="text" class="form-input" id="locationDesc" placeholder="Near metro station, sector 15...">
+                            </div>
+
+                            <div class="form-group">
+                                <label class="form-label">Description</label>
+                                <textarea class="form-textarea" id="description" placeholder="Describe the emergency situation..."></textarea>
+                            </div>
+
+                            <button type="submit" class="submit-btn">🚨 SUBMIT INCIDENT REPORT</button>
+                        </form>
+
+                        <div class="recent-incidents">
+                            <div class="form-title" style="font-size: 12px;">Recent Incidents</div>
+                            <div id="recentIncidentsList"></div>
+                        </div>
+                    </div>
+                </div>
+            
+                </div>
+            </div>
+            
+            <div id="hospitalsTabTab" class="tab-content">
+                <div class="hospitals-container">
+                    
+                <div class="hospitals-header">
+                    <h1 class="hospitals-title">Hospital Network Status</h1>
+                    <div class="hospitals-stats">
+                        <div class="hospital-stat-card">
+                            <div class="hospital-stat-value" id="statTotal">0</div>
+                            <div class="hospital-stat-label">Total Hospitals</div>
+                        </div>
+                        <div class="hospital-stat-card">
+                            <div class="hospital-stat-value" id="statAvailable">0</div>
+                            <div class="hospital-stat-label">Available</div>
+                        </div>
+                        <div class="hospital-stat-card">
+                            <div class="hospital-stat-value" id="statBusy">0</div>
+                            <div class="hospital-stat-label">Busy</div>
+                        </div>
+                        <div class="hospital-stat-card">
+                            <div class="hospital-stat-value" id="statFull">0</div>
+                            <div class="hospital-stat-label">At Capacity</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="sort-controls">
+                    <button class="sort-btn active" data-sort="workload">BY WORKLOAD</button>
+                    <button class="sort-btn" data-sort="beds">BY BEDS</button>
+                    <button class="sort-btn" data-sort="name">BY NAME</button>
+                    <button class="sort-btn" data-sort="wait">BY WAIT TIME</button>
+                </div>
+
+                <div class="hospitals-grid" id="hospitalsGrid"></div>
+            
+                </div>
+            </div>
+            
+            <div id="profileTab" class="tab-content">
+                <div class="analytics-container">
+                    
+                <div class="analytics-panel">
+                    <div class="panel-title">📋 Patient Data Entry</div>
+
+                    <div class="share-status">
+                        <div class="share-indicator"></div>
+                        <span class="share-text">Data will be shared with destination hospital in real-time</span>
+                    </div>
+
+                    <div class="hospital-selector">
+                        <label class="form-label">Destination Hospital</label>
+                        <select class="form-select" id="destinationHospital">
+                            <option value="">Select hospital...</option>
+                            <option value="1">City General Hospital</option>
+                            <option value="2">Metro Medical Center</option>
+                            <option value="3">Sunrise Health Institute</option>
+                            <option value="4">Life Care Hospital</option>
+                            <option value="5">Emergency Plus Hospital</option>
+                        </select>
+                    </div>
+
+                    <div class="hospital-preview" id="hospitalPreview" style="display: none;">
+                        <div class="hospital-preview-title">Preparing to share with:</div>
+                        <div class="hospital-preview-name" id="previewHospitalName">-</div>
+                        <button class="clear-btn" onclick="clearHospitalSelection()">Change</button>
+                    </div>
+
+                    <form id="patientForm">
+                        <div class="form-section">
+                            <div class="section-title">Basic Information</div>
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label class="form-label">Patient Name</label>
+                                    <input type="text" class="form-input" id="patientName" placeholder="Enter name">
+                                </div>
+                                <div class="form-group">
+                                    <label class="form-label">Age</label>
+                                    <input type="number" class="form-input" id="patientAge" placeholder="Age">
+                                </div>
+                                <div class="form-group">
+                                    <label class="form-label">Gender</label>
+                                    <select class="form-select" id="patientGender">
+                                        <option value="">Select</option>
+                                        <option value="MALE">Male</option>
+                                        <option value="FEMALE">Female</option>
+                                        <option value="OTHER">Other</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div class="form-row two-col">
+                                <div class="form-group">
+                                    <label class="form-label">Blood Type</label>
+                                    <select class="form-select" id="bloodType">
+                                        <option value="">Select</option>
+                                        <option value="A+">A+</option>
+                                        <option value="A-">A-</option>
+                                        <option value="B+">B+</option>
+                                        <option value="B-">B-</option>
+                                        <option value="AB+">AB+</option>
+                                        <option value="AB-">AB-</option>
+                                        <option value="O+">O+</option>
+                                        <option value="O-">O-</option>
+                                    </select>
+                                </div>
+                                <div class="form-group">
+                                    <label class="form-label">Patient ID</label>
+                                    <input type="text" class="form-input" id="patientId" placeholder="Auto-generated">
+                                
+                </div>
+            </div>
+            
+            <div class="sos-modal" id="sosModal">
+        <div class="sos-modal-content">
+            <div class="sos-modal-title">SOS TRIGGERED</div>
+            <div class="sos-modal-text">Emergency services are being dispatched to your location.</div>
+            <div class="location-text" id="sosLocation" style="margin-bottom: 30px;"></div>
+            <div class="sos-modal-actions">
+                <button class="sos-action-btn cancel" onclick="cancelSOS()">CANCEL</button>
+                <button class="sos-action-btn confirm" onclick="submitRequest(true)">CONFIRM DISPATCH</button>
+            </div>
+        </div>
+            
+            <div class="hospital-modal" id="hospitalModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 class="modal-title" id="modalTitle">Hospital Name</h2>
+                <button class="modal-close" onclick="closeModal()">&times;</button>
+            </div>
+            <div class="modal-stats">
+                <div class="modal-stat">
+                    <div class="modal-stat-value" id="modalBeds">0</div>
+                    <div class="modal-stat-label">Total Beds</div>
+                </div>
+
+
+        </div>
+    </div>
+    
+    <script>
+
+        
+        const TOKEN = localStorage.getItem('resq_token');
+        const USER = localStorage.getItem('resq_user') || 'Patient';
+        const AUTH = { 'Authorization': 'Bearer ' + TOKEN, 'Content-Type': 'application/json' };
+
+        if (!TOKEN) {
+            window.location.href = '/login';
+        }
+
+        document.getElementById('userName').textContent = USER;
+        if(document.getElementById('userAvatar')) document.getElementById('userAvatar').textContent = USER.charAt(0).toUpperCase();
+
+        document.getElementById('logoutBtn').addEventListener('click', () => {
+            localStorage.removeItem('resq_token');
+            localStorage.removeItem('resq_user');
+            localStorage.removeItem('resq_role');
+            localStorage.removeItem('resq_userId');
+            window.location.href = '/login';
+        });
+
+        let map = null;
+        let incMap = null;
+        let patientMarker = null;
+        let assignedAmbulanceMarker = null;
+        let ambulanceMarkers = {};
+        let hospitalMarkers = {};
+        let routeLine = null;
+        let currentIncidentId = null;
+        let stompClient = null;
+        let wsConnected = false;
+        let lastStatus = null;
+
+        const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+
+        function playSound(type) {
+            const sounds = {
+                'ASSIGNED': { freq: 440, duration: 0.2, pattern: [0.2, 0.1, 0.2] },
+                'EN_ROUTE_PATIENT': { freq: 523, duration: 0.3, pattern: [0.3, 0.1, 0.3, 0.1, 0.3] },
+                'PICKED_UP': { freq: 659, duration: 0.4, pattern: [0.4, 0.1, 0.4] },
+                'ARRIVED_HOSPITAL': { freq: 880, duration: 0.5, pattern: [0.5, 0.1, 0.5, 0.1, 0.5] }
+            };
+
+            const sound = sounds[type];
+            if (!sound) return;
+
+            try {
+                let delay = 0;
+                sound.pattern.forEach((dur, i) => {
+                    if (i % 2 === 0) {
+                        const oscillator = audioContext.createOscillator();
+                        const gainNode = audioContext.createGain();
+                        oscillator.connect(gainNode);
+                        gainNode.connect(audioContext.destination);
+                        oscillator.frequency.value = sound.freq;
+                        oscillator.type = 'sine';
+                        gainNode.gain.setValueAtTime(0.3, audioContext.currentTime + delay);
+                        gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + delay + dur);
+                        oscillator.start(audioContext.currentTime + delay);
+                        oscillator.stop(audioContext.currentTime + delay + dur);
+                    }
+                    delay += dur;
+                });
+            } catch (e) {
+                console.log('Audio not supported');
+            }
+        }
+
+        function initPatientMap() {
+            console.log('Initializing Patient Map...');
+            const container = document.getElementById('patientMap');
+            if (!container) { console.error('patientMap container not found'); return; }
+            console.log('Container size:', container.offsetWidth, 'x', container.offsetHeight);
+
+            if (map) {
+                console.log('Map already exists, invalidating size');
+                map.invalidateSize();
+                loadAllAmbulances();
+                checkActiveIncident();
+                return;
+            }
+            map = L.map('patientMap', { zoomControl: false }).setView([28.6139, 77.2090], 12);
+            
+            L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+                attribution: '© OpenStreetMap contributors © CARTO',
+                maxZoom: 19
+            }).addTo(map);
+
+            L.control.zoom({ position: 'bottomright' }).addTo(map);
+            
+            setTimeout(() => { 
+                map.invalidateSize();
+                console.log('Map invalidated, loading data...');
+                loadAllHospitals();
+                loadAllAmbulances();
+                checkActiveIncident();
+            }, 300);
+            
+            // Periodically refresh fleet data
+            setInterval(loadAllAmbulances, 30000);
+        }
+
+        function loadAllAmbulances() {
+            console.log('Loading ambulances...');
+            fetch('/api/ambulances', { headers: AUTH })
+                .then(res => res.json())
+                .then(ambulances => {
+                    console.log('Ambulances received:', ambulances.length, ambulances);
+                    ambulances.forEach(amb => {
+                        if (amb.lat && amb.lng) {
+                            addAmbulanceMarker(amb);
+                        } else {
+                            console.warn('Skipping ambulance missing coords:', amb.unitCode);
+                        }
+                    });
+                    if(document.getElementById('mapAmbulances')) document.getElementById('mapAmbulances').textContent = ambulances.length;
+                })
+                .catch(err => { console.error('Error loading ambulances:', err); });
+        }
+
+        function addAmbulanceMarker(amb) {
+            console.log('Adding ambulance marker:', amb.unitCode, 'lat:', amb.lat, 'lng:', amb.lng);
+            
+            if (ambulanceMarkers[amb.id]) {
+                ambulanceMarkers[amb.id].setLatLng([amb.lat, amb.lng]);
+                ambulanceMarkers[amb.id].setPopupContent(getAmbulancePopup(amb));
+                return;
+            }
+
+            const statusColors = {
+                'STANDBY': '#00ff88',
+                'TRANSIT_TO_PATIENT': '#ffaa00',
+                'TRANSIT_TO_HOSPITAL': '#ff6644',
+                'ON_SCENE': '#ffaa00',
+                'AT_HOSPITAL': '#00f0ff',
+                'UNAVAILABLE': '#ff4444'
+            };
+
+            const color = statusColors[amb.status] || '#00f0ff';
+            const iconStr = '🚑';
+            const icon = L.divIcon({
+                html: `<div class="pulse-marker" style="font-size:32px;text-align:center;filter:drop-shadow(0 0 10px ${color});">${iconStr}</div>`,
+                className: 'ambulance-marker-icon',
+                iconSize: [36, 36], iconAnchor: [18, 18]
+            });
+
+            const marker = L.marker([amb.lat, amb.lng], {
+                icon: icon
+            }).addTo(map).bindPopup(getAmbulancePopup(amb));
+
+            ambulanceMarkers[amb.id] = marker;
+            console.log('Ambulance marker added for:', amb.unitCode);
+            updateDiagCounts();
+        }
+
+        function updateDiagCounts() {
+            const fleetCount = Object.keys(ambulanceMarkers).length;
+            const hospCount = Object.keys(hospitalMarkers).length;
+            if(document.getElementById('diagFleet')) document.getElementById('diagFleet').textContent = fleetCount;
+            if(document.getElementById('diagHosp')) document.getElementById('diagHosp').textContent = hospCount;
+        }
+
+        let currentRouteType = null;
+
+        function drawRoute(startLat, startLng, endLat, endLng, type) {
+            // If switching route type (PATIENT → HOSPITAL), force a fresh route
+            const typeChanged = currentRouteType !== type;
+            currentRouteType = type;
+
+            console.log(`Fetching ${type} route from (${startLat.toFixed(4)},${startLng.toFixed(4)}) → (${endLat.toFixed(4)},${endLng.toFixed(4)})`);
+            const url = `https://router.project-osrm.org/route/v1/driving/${startLng},${startLat};${endLng},${endLat}?overview=full&geometries=geojson`;
+
+            fetch(url)
+                .then(res => res.json())
+                .then(data => {
+                    if (data.code !== 'Ok') { console.warn('OSRM no route:', data.code); return; }
+
+                    const coords = data.routes[0].geometry.coordinates.map(c => [c[1], c[0]]);
+                    routeCoordinates = coords;
+
+                    const color = type === 'HOSPITAL' ? '#00f0ff' : '#ffaa00';
+
+                    // Always redraw when type changed; otherwise just update coords
+                    if (routeLine && !typeChanged) {
+                        routeLine.setLatLngs(coords);
+                    } else {
+                        // Remove old route(s) cleanly
+                        if (routeLine) { map.removeLayer(routeLine); routeLine = null; }
+                        // Remove old glow layers (tag them so we can remove)
+                        map.eachLayer(l => { if (l._isGlowRoute) map.removeLayer(l); });
+
+                        routeLine = L.polyline(coords, {
+                            color: color,
+                            weight: 5,
+                            opacity: 0.85,
+                            dashArray: '15, 10'
+                        }).addTo(map);
+
+                        // Glow layer underneath
+                        const glow = L.polyline(coords, {
+                            color: color,
+                            weight: 12,
+                            opacity: 0.18
+                        }).addTo(map);
+                        glow._isGlowRoute = true;
+                    }
+
+                    if (coords.length > 0) {
+                        map.fitBounds(routeLine.getBounds(), { padding: [60, 60] });
+                    }
+                })
+                .catch(err => console.error('Routing error:', err));
+        }
+
+        function trimRouteToPosition(lat, lng) {
+            if (!routeLine || !routeCoordinates || routeCoordinates.length < 2) return;
+            
+            let minIndex = 0;
+            let minDist = Infinity;
+            const currentPos = L.latLng(lat, lng);
+
+            for (let i = 0; i < routeCoordinates.length; i++) {
+                const dist = currentPos.distanceTo(L.latLng(routeCoordinates[i][0], routeCoordinates[i][1]));
+                if (dist < minDist) {
+                    minDist = dist;
+                    minIndex = i;
+                }
+            }
+
+            routeCoordinates = routeCoordinates.slice(minIndex);
+            if (routeCoordinates.length > 0) {
+                routeCoordinates[0] = [lat, lng];
+                routeLine.setLatLngs(routeCoordinates);
+            }
+        }
+
+        function animateMarker(marker, newLat, newLng) {
+            const startPos = marker.getLatLng();
+            const endPos = L.latLng(newLat, newLng);
+            const duration = 1000; // 1 second animation
+            const start = performance.now();
+
+            function frame(now) {
+                const elapsed = now - start;
+                const progress = Math.min(elapsed / duration, 1);
+                
+                const currentLat = startPos.lat + (endPos.lat - startPos.lat) * progress;
+                const currentLng = startPos.lng + (endPos.lng - startPos.lng) * progress;
+                
+                marker.setLatLng([currentLat, currentLng]);
+
+                if (progress < 1) {
+                    requestAnimationFrame(frame);
+                }
+            }
+            requestAnimationFrame(frame);
+        }
+
+        function getAmbulancePopup(amb) {
+            return `
+                <div class="popup-title">${amb.unitCode}</div>
+                <div class="popup-info">Status: ${amb.status}</div>
+                ${amb.assignedDriverName ? `<div class="popup-info">Driver: ${amb.assignedDriverName}</div>` : ''}
+            `;
+        }
+
+        function loadAllHospitals() {
+            console.log('Loading hospitals...');
+            fetch('/api/hospitals', { headers: AUTH })
+                .then(res => res.json())
+                .then(hospitals => {
+                    console.log('Hospitals received:', hospitals.length);
+                    if(document.getElementById('mapHospitals')) document.getElementById('mapHospitals').textContent = hospitals.length;
+                    hospitals.forEach(hosp => {
+                        if (hosp.lat && hosp.lng) {
+                            addHospitalMarker(hosp);
+                        }
+                    });
+                })
+                .catch(err => { console.error('Error loading hospitals:', err); });
+        }
+
+        function addHospitalMarker(hosp) {
+            const pct = hosp.totalBeds > 0 ? (hosp.availableBeds / hosp.totalBeds) * 100 : 0;
+            const c = pct < 30 ? '#f0192a' : pct < 60 ? '#f5a800' : '#00e676';
+
+            const icon = L.divIcon({
+                html: `<div style="font-size:22px;text-align:center;filter:drop-shadow(0 0 6px ${c});">🏥</div>`,
+                iconSize: [26, 26], iconAnchor: [13, 13], className: ''
+            });
+
+            const marker = L.marker([hosp.lat, hosp.lng], {
+                icon: icon
+            }).addTo(map).bindPopup(`
+                <div class="popup-title">${hosp.name}</div>
+                <div class="popup-info">Beds: <span style="color: ${c}">${hosp.availableBeds}</span>/${hosp.totalBeds || 120}</div>
+                <div class="popup-info">${hosp.specialties || hosp.address || ''}</div>
+            `);
+
+            hospitalMarkers[hosp.id] = marker;
+        }
+
+        function updatePatientLocation(lat, lng) {
+            if (patientMarker) map.removeLayer(patientMarker);
+
+            patientMarker = L.circleMarker([lat, lng], {
+                radius: 15,
+                fillColor: '#ff4444',
+                color: '#fff',
+                weight: 3,
+                fillOpacity: 1
+            }).addTo(map).bindPopup('<div class="popup-title">📍 Your Location</div>');
+            
+            currentLocation = { lat: lat, lng: lng };
+        }
+
+        function updateAssignedAmbulance(amb) {
+            console.log('updateAssignedAmbulance called with:', amb);
+            console.log('Coords: ambulanceLat=', amb.ambulanceLat, 'ambulanceLng=', amb.ambulanceLng);
+            
+            if (assignedAmbulanceMarker) map.removeLayer(assignedAmbulanceMarker);
+
+            const icon = L.divIcon({
+                html: `<div style="background: linear-gradient(135deg, #00f0ff 0%, #0080ff 100%); width: 40px; height: 40px; border-radius: 50%; border: 4px solid #fff; display: flex; align-items: center; justify-content: center; font-size: 20px; box-shadow: 0 0 25px rgba(0,240,255,0.6); animation: pulse 1.5s infinite;">🚑</div>`,
+                className: 'ambulance-marker-icon',
+                iconSize: [40, 40],
+                iconAnchor: [20, 20]
+            });
+
+            // Validate coordinates before creating marker
+            if (!amb.ambulanceLat || !amb.ambulanceLng) {
+                console.error('Missing ambulance coordinates!');
+                document.getElementById('ambCode').textContent = amb.ambulanceCode || 'Assigned';
+                document.getElementById('ambDriver').textContent = 'Location unavailable';
+                return;
+            }
+
+            assignedAmbulanceMarker = L.marker([amb.ambulanceLat, amb.ambulanceLng], { icon: icon }).addTo(map)
+                .bindPopup(`<div class="popup-title">${amb.ambulanceCode}</div><div class="popup-info">ETA: ${amb.etaMinutes || '--'} min</div>`);
+
+            // Center map on ambulance
+            map.setView([amb.ambulanceLat, amb.ambulanceLng], 14);
+
+            document.getElementById('ambCode').textContent = amb.ambulanceCode || 'Assigned';
+            document.getElementById('ambDriver').textContent = amb.assignedDriverName || 'Driver assigned';
+            document.getElementById('etaValue').textContent = amb.etaMinutes || '--';
+            
+            console.log('Assigned ambulance marker created at:', amb.ambulanceLat, amb.ambulanceLng);
+        }
+
+        function updateStatusTimeline(status) {
+            // Map backend status → step element IDs (in order)
+            const stepMap = [
+                { statuses: ['REQUESTED', 'PENDING'],           id: 'step-requested' },
+                { statuses: ['ASSIGNED', 'EN_ROUTE_PATIENT'],   id: 'step-dispatched' },
+                { statuses: ['EN_ROUTE_PATIENT'],               id: 'step-en-route'  },
+                { statuses: ['PICKED_UP'],                      id: 'step-arrived'   },
+                { statuses: ['EN_ROUTE_HOSPITAL','ARRIVED_HOSPITAL'], id: 'step-transit' }
+            ];
+
+            // Which ordered index is the current status?
+            const ordered = ['PENDING','REQUESTED','ASSIGNED','EN_ROUTE_PATIENT','PICKED_UP','EN_ROUTE_HOSPITAL','ARRIVED_HOSPITAL'];
+            const currentIndex = ordered.indexOf(status);
+
+            const stepIds  = ['step-requested','step-dispatched','step-en-route','step-arrived','step-transit'];
+            // Map each stepId to the ordered index that activates it
+            const activationIndex = [1, 2, 3, 4, 5]; // REQUESTED=1, ASSIGNED=2, EN_ROUTE=3, PICKED_UP=4, EN_ROUTE_HOSPITAL=5
+
+            stepIds.forEach((id, i) => {
+                const el = document.getElementById(id);
+                if (!el) return;
+                el.classList.remove('active', 'completed');
+                if (currentIndex > activationIndex[i]) {
+                    el.classList.add('completed');
+                } else if (currentIndex === activationIndex[i] || 
+                           (i === stepIds.length - 1 && currentIndex >= activationIndex[i])) {
+                    el.classList.add('active');
+                }
+            });
+
+            // Friendly status label in detail card
+            const statusLabels = {
+                'PENDING':            '⏳ Searching for unit...',
+                'REQUESTED':          '⏳ Searching for unit...',
+                'ASSIGNED':           '🚑 Unit Dispatched',
+                'EN_ROUTE_PATIENT':   '📍 En Route to You',
+                'PICKED_UP':          '🏥 Patient Picked Up',
+                'EN_ROUTE_HOSPITAL':  '🚀 Heading to Hospital',
+                'ARRIVED_HOSPITAL':   '✅ Arrived at Hospital'
+            };
+            const statusEl = document.getElementById('ambDriver');
+            if (statusEl && statusLabels[status]) {
+                statusEl.textContent = statusLabels[status];
+            }
+        }
+
+        async function checkActiveIncident() {
+            try {
+                console.log('Checking active incident...');
+                const response = await fetch('/api/patient/my-incident', { headers: AUTH });
+                const data = await response.json();
+                console.log('Incident data received:', data);
+
+                if (data.status === 'NO_ACTIVE_INCIDENT') {
+                    const localIncident = localStorage.getItem('resq_incidentId');
+                    if (localIncident && currentIncidentId === parseInt(localIncident)) {
+                        if(document.getElementById('noRequestOverlay')) document.getElementById('noRequestOverlay').classList.add('hidden');
+                        if(document.getElementById('trackingPanel')) document.getElementById('trackingPanel').classList.add('visible');
+                        document.getElementById('ambCode').textContent = 'Dispatch Pending...';
+                        document.getElementById('ambDriver').textContent = 'Waiting for dispatcher';
+                        return;
+                    }
+                    if(document.getElementById('noRequestOverlay')) document.getElementById('noRequestOverlay').classList.remove('hidden');
+                    if(document.getElementById('trackingPanel')) document.getElementById('trackingPanel').classList.remove('visible');
+                    currentIncidentId = null;
+                    localStorage.removeItem('resq_incidentId');
+                    return;
+                }
+
+                if(document.getElementById('noRequestOverlay')) document.getElementById('noRequestOverlay').classList.add('hidden');
+                if(document.getElementById('trackingPanel')) document.getElementById('trackingPanel').classList.add('visible');
+                currentIncidentId = data.incidentId;
+                localStorage.setItem('resq_incidentId', currentIncidentId);
+
+                updatePatientLocation(data.lat, data.lng);
+                updateStatusTimeline(data.status);
+
+                console.log('Checking ambulance data - ambulanceId:', data.ambulanceId, 'ambulanceLat:', data.ambulanceLat);
+                
+                if (data.ambulanceId) {
+                    console.log('Calling updateAssignedAmbulance with:', data);
+                    updateAssignedAmbulance(data);
+
+                    if (data.status === 'PICKED_UP' || data.status === 'EN_ROUTE_HOSPITAL') {
+                        if (data.assignedHospitalId) {
+                            fetch('/api/hospitals/' + data.assignedHospitalId, { headers: AUTH })
+                                .then(r => r.json())
+                                .then(hospital => {
+                                    // Route FROM ambulance current position TO hospital
+                                    const fromLat = data.ambulanceLat || data.lat;
+                                    const fromLng = data.ambulanceLng || data.lng;
+                                    drawRoute(fromLat, fromLng, hospital.lat, hospital.lng, 'HOSPITAL');
+                                }).catch(() => {});
+                        }
+                    } else if (data.status === 'EN_ROUTE_PATIENT') {
+                        if (data.ambulanceLat && data.ambulanceLng) {
+                            drawRoute(data.ambulanceLat, data.ambulanceLng, data.lat, data.lng, 'PATIENT');
+                        }
+                    } else if (data.status === 'ARRIVED_HOSPITAL') {
+                        // Clear route when arrived
+                        if (routeLine) { map.removeLayer(routeLine); routeLine = null; }
+                        map.eachLayer(l => { if (l._isGlowRoute) map.removeLayer(l); });
+                    }
+                }
+
+                if (lastStatus !== data.status) {
+                    if (lastStatus !== null) {
+                        playSound(data.status);
+                    }
+                    lastStatus = data.status;
+                }
+            } catch (err) {
+                console.error('Error checking incident:', err);
+            }
+        }
+
+        function connectWebSocket() {
+            const socket = new SockJS('/ws');
+            stompClient = Stomp.over(socket);
+
+            stompClient.connect({}, function(frame) {
+                wsConnected = true;
+                document.getElementById('connectionStatus').textContent = '⚡ WebSocket: Live';
+                document.getElementById('connectionStatus').className = 'connection-status connected';
+
+                stompClient.subscribe('/topic/patient/' + getPatientId() + '/updates', function(message) {
+                    const data = JSON.parse(message.body);
+                    handleLocationUpdate(data);
+                });
+
+                stompClient.subscribe('/topic/incident/updates', function(message) {
+                    const data = JSON.parse(message.body);
+                    if (data.incidentId == currentIncidentId) {
+                        handleIncidentUpdate(data);
+                    }
+                });
+
+                stompClient.subscribe('/topic/ambulance/locations', function(message) {
+                    const data = JSON.parse(message.body);
+                    updateAmbulancePosition(data);
+                });
+
+            }, function(error) {
+                wsConnected = false;
+                document.getElementById('connectionStatus').textContent = '⚡ WebSocket: Reconnecting...';
+                document.getElementById('connectionStatus').className = 'connection-status disconnected';
+                setTimeout(connectWebSocket, 5000);
+            });
+        }
+
+        function getPatientId() {
+            const userId = localStorage.getItem('resq_userId');
+            if (userId) {
+                return parseInt(userId);
+            }
+            const token = localStorage.getItem('resq_token');
+            if (token) {
+                try {
+                    const payload = JSON.parse(atob(token.split('.')[1]));
+                    return payload.userId || 1;
+                } catch (e) {}
+            }
+            return 1;
+        }
+
+        function handleLocationUpdate(data) {
+            if (!assignedAmbulanceMarker && data.ambulanceId) {
+                updateAssignedAmbulance(data);
+                // Trigger initial route drawing
+                drawRoute(data.lat, data.lng, currentLocation.lat, currentLocation.lng, 'PATIENT');
+            }
+
+            if (assignedAmbulanceMarker) {
+                animateMarker(assignedAmbulanceMarker, data.lat, data.lng);
+                assignedAmbulanceMarker.setPopupContent(`<div class="popup-title">${data.ambulanceCode || 'AMB'}</div><div class="popup-info">ETA: ${data.etaMinutes || '--'} min</div>`);
+                
+                // Keep route updated
+                if (routeLine) {
+                    trimRouteToPosition(data.lat, data.lng);
+                } else {
+                    drawRoute(data.lat, data.lng, currentLocation.lat, currentLocation.lng, 'PATIENT');
+                }
+            }
+            
+            document.getElementById('etaValue').textContent = data.etaMinutes || '--';
+            if (data.ambulanceCode) document.getElementById('ambCode').textContent = data.ambulanceCode;
+        }
+
+        function handleIncidentUpdate(data) {
+            if (data.status) {
+                updateStatusTimeline(data.status);
+
+                if (lastStatus !== data.status) {
+                    playSound(data.status);
+
+                    // When patient is picked up → switch map to hospital route
+                    if ((data.status === 'PICKED_UP' || data.status === 'EN_ROUTE_HOSPITAL') && data.hospitalId) {
+                        fetch('/api/hospitals/' + data.hospitalId, { headers: AUTH })
+                            .then(r => r.json())
+                            .then(hospital => {
+                                const fromLat = data.ambulanceLat || currentLocation.lat;
+                                const fromLng = data.ambulanceLng || currentLocation.lng;
+                                drawRoute(fromLat, fromLng, hospital.lat, hospital.lng, 'HOSPITAL');
+                            }).catch(() => {});
+                    } else if (data.status === 'ARRIVED_HOSPITAL') {
+                        if (routeLine) { map.removeLayer(routeLine); routeLine = null; }
+                        map.eachLayer(l => { if (l._isGlowRoute) map.removeLayer(l); });
+                    }
+
+                    lastStatus = data.status;
+                }
+            }
+
+            if (data.ambulanceCode) {
+                document.getElementById('ambCode').textContent = data.ambulanceCode;
+            }
+
+            if (data.hospitalName) {
+                document.getElementById('ambDriver').textContent = '🏥 Heading to: ' + data.hospitalName;
+            }
+        }
+
+        function updateAmbulancePosition(data) {
+            const marker = ambulanceMarkers[data.ambulanceId];
+            if (marker) {
+                animateMarker(marker, data.lat, data.lng);
+            } else {
+                // If it's a new ambulance or hasn't been loaded yet
+                addAmbulanceMarker({
+                    id: data.ambulanceId,
+                    lat: data.lat,
+                    lng: data.lng,
+                    unitCode: data.ambulanceCode || 'AMB',
+                    status: 'TRANSIT_TO_PATIENT'
+                });
+            }
+
+            if (currentIncidentId && assignedAmbulanceMarker && data.patientId == getPatientId()) {
+                handleLocationUpdate(data);
+            }
+        }
+
+        if(document.getElementById('autoLocationBtn')) document.getElementById('autoLocationBtn').addEventListener('click', () => {
+            if (navigator.geolocation) {
+                navigator.geolocation.getCurrentPosition(
+                    (position) => {
+                        const lat = position.coords.latitude;
+                        const lng = position.coords.longitude;
+                        document.getElementById('latitude').value = lat;
+                        document.getElementById('longitude').value = lng;
+                        document.getElementById('locationDesc').value = `${lat.toFixed(6)}, ${lng.toFixed(6)}`;
+                        
+                        fetch(`/api/geocode?lat=${lat}&lon=${lng}`)
+                            .then(r => r.json())
+                            .then(data => {
+                                if (data.display_name) {
+                                    document.getElementById('locationDesc').value = data.display_name;
+                                }
+                            })
+                            .catch(() => {});
+                    },
+                    (error) => {
+                        alert('Unable to get location. Using default location.');
+                        useDefaultLocation();
+                    }
+                );
+            } else {
+                alert('GPS not supported. Using default location.');
+                useDefaultLocation();
+            }
+        });
+
+        function useDefaultLocation() {
+            const lat = 28.6139;
+            const lng = 77.2090;
+            document.getElementById('latitude').value = lat;
+            document.getElementById('longitude').value = lng;
+            document.getElementById('locationDesc').value = `${lat.toFixed(6)}, ${lng.toFixed(6)} (Delhi Central)`;
+        }
+
+        if(document.getElementById('manualLocationBtn')) document.getElementById('manualLocationBtn').addEventListener('click', () => {
+            useDefaultLocation();
+        });
+
+        if(document.getElementById('incidentForm')) document.getElementById('incidentForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            submitRequest(false);
+        });
+
+        if(document.getElementById('mainSosBtn')) document.getElementById('mainSosBtn').addEventListener('click', async () => {
+            if (navigator.geolocation) {
+                navigator.geolocation.getCurrentPosition(
+                    (position) => {
+                        document.getElementById('latitude').value = position.coords.latitude;
+                        document.getElementById('longitude').value = position.coords.longitude;
+                        if(document.getElementById('emergencyType')) document.getElementById('emergencyType').value = 'MEDICAL';
+                        if(document.getElementById('severityLevel')) document.getElementById('severityLevel').value = 'CRITICAL';
+                        document.getElementById('description').value = 'SOS TRIGGERED';
+                        submitRequest(true);
+                    },
+                    (error) => {
+                        useDefaultLocation();
+                        if(document.getElementById('emergencyType')) document.getElementById('emergencyType').value = 'MEDICAL';
+                        if(document.getElementById('severityLevel')) document.getElementById('severityLevel').value = 'CRITICAL';
+                        document.getElementById('description').value = 'SOS TRIGGERED';
+                        submitRequest(true);
+                    }
+                );
+            } else {
+                useDefaultLocation();
+                        if(document.getElementById('emergencyType')) document.getElementById('emergencyType').value = 'MEDICAL';
+                        if(document.getElementById('severityLevel')) document.getElementById('severityLevel').value = 'CRITICAL';
+                        document.getElementById('description').value = 'SOS TRIGGERED';
+                submitRequest(true);
+            }
+        });
+
+        async function submitRequest(isSos) {
+            const lat = parseFloat(document.getElementById('latitude')?.value || document.getElementById('latitude')?.value) || 28.6139;
+            const lng = parseFloat(document.getElementById('longitude')?.value || document.getElementById('longitude')?.value) || 77.2090;
+            const condition = isSos ? 'SOS TRIGGERED' : (document.getElementById('description')?.value || '');
+            const emergencyType = isSos ? 'MEDICAL' : (document.getElementById('emergencyType')?.value || 'MEDICAL');
+            const severityLevel = isSos ? 'CRITICAL' : (typeof selectedSeverity !== 'undefined' ? selectedSeverity : 'MODERATE');
+            const preferredHospital = null;
+
+            if (!lat || !lng || isNaN(lat) || isNaN(lng)) {
+                alert('Please provide a valid location. Click GPS or Delhi button.');
+                return;
+            }
+
+            const btn = document.getElementById(isSos ? 'mainSosBtn' : 'mainSosBtn');
+            const originalText = btn.textContent;
+            btn.disabled = true;
+            btn.textContent = 'SUBMITTING...';
+
+            try {
+                const response = await fetch('/api/patient/request-ambulance', {
+                    method: 'POST',
+                    headers: AUTH,
+                    body: JSON.stringify({
+                        lat: lat,
+                        lng: lng,
+                        condition: emergencyType + (severityLevel ? ` [${severityLevel}]` : '') + (condition ? ': ' + condition : ''),
+                        preferredHospitalId: preferredHospital || null
+                    })
+                });
+
+                const data = await response.json();
+
+                if (response.ok) {
+                    if(document.getElementById('incidentForm')) document.getElementById('incidentForm').reset();
+                    playSound('REQUESTED');
+                    
+                    currentIncidentId = data.incidentId;
+                    localStorage.setItem('resq_incidentId', currentIncidentId);
+                    lastStatus = 'REQUESTED';
+                    
+                    document.querySelector('[data-tab="track"]').click();
+                    
+                    setTimeout(() => {
+                        if(typeof initPatientMap === 'function') initPatientMap();
+                        updatePatientLocation(lat, lng);
+                        updateStatusTimeline('REQUESTED');
+                        if(document.getElementById('noRequestOverlay')) document.getElementById('noRequestOverlay').classList.add('hidden');
+                        if(document.getElementById('trackingPanel')) document.getElementById('trackingPanel').classList.add('visible');
+                        if(document.getElementById('mapIncidents')) document.getElementById('mapIncidents').textContent = '1';
+                        
+                        checkActiveIncident();
+                    }, 100);
+                } else {
+                    alert(data.error || 'Failed to submit request');
+                }
+            } catch (err) {
+                alert('Connection error. Please try again.');
+            } finally {
+                btn.disabled = false;
+                btn.textContent = originalText;
+            }
+        }
+
+        document.querySelectorAll('.tab-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+                document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+                
+                btn.classList.add('active');
+                document.getElementById(btn.dataset.tab + 'Tab').classList.add('active');
+
+                if (btn.dataset.tab === 'track') {
+                    if (typeof initPatientMap === 'function') initPatientMap();
+                    checkActiveIncident();
+                } else if (btn.dataset.tab === 'request') {
+                    if (typeof initIncidentMap === 'function') {
+                        setTimeout(() => { initIncidentMap(); }, 100);
+                    }
+                }
+            });
+        });
+
+        async function loadHospitals() {
+            try {
+                const response = await fetch('/api/hospitals', { headers: AUTH });
+                const hospitals = await response.json();
+                
+                const select = document.getElementById('preferredHospital');
+            if(!select) return;
+                const listContainer = document.getElementById('hospitalListContainer');
+                if (listContainer) listContainer.innerHTML = '';
+
+                hospitals.forEach(h => {
+                    const option = document.createElement('option');
+                    option.value = h.id;
+                    option.textContent = `${h.name} (${h.availableBeds} beds available)`;
+                    select.appendChild(option);
+
+                    if (listContainer) {
+                        const bedsColor = h.availableBeds > 10 ? '#00ff88' : h.availableBeds > 0 ? '#ffaa00' : '#ff4444';
+                        listContainer.innerHTML += `
+                            <div style="background: rgba(0,0,0,0.3); border: 1px solid rgba(0,240,255,0.2); border-radius: 8px; padding: 15px; display: flex; justify-content: space-between; align-items: center;">
+                                <div>
+                                    <div style="font-family: 'Orbitron', sans-serif; font-size: 16px; color: #00f0ff;">${h.name}</div>
+                                    <div style="font-size: 12px; color: #888; margin-top: 5px;">${h.address || 'Address not listed'}</div>
+                                </div>
+                                <div style="text-align: right;">
+                                    <div style="font-size: 24px; color: ${bedsColor}; font-weight: bold;">${h.availableBeds}</div>
+                                    <div style="font-size: 10px; color: #666; text-transform: uppercase;">Available Beds</div>
+                                </div>
+                            </div>
+                        `;
+                    }
+                });
+            } catch (err) {}
+        }
+
+        loadHospitals();
+        connectWebSocket();
+        setInterval(checkActiveIncident, 5000);
+    
+
+        // Add clock logic
+        function updateNavClock() {
+            const now = new Date();
+            const clockEl = document.getElementById('navClock');
+            if(clockEl) clockEl.textContent = now.toLocaleTimeString('en-US', {hour12: false});
+        }
+        setInterval(updateNavClock, 1000);
+        updateNavClock();
+
+        // Fix tab navigation
+        document.querySelectorAll('.vnav-btn[data-tab]').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                e.preventDefault();
+                document.querySelectorAll('.vnav-btn[data-tab]').forEach(b => b.classList.remove('active'));
+                document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+                
+                btn.classList.add('active');
+                document.getElementById(btn.dataset.tab + 'Tab').classList.add('active');
+
+                if (btn.dataset.tab === 'track') {
+                    setTimeout(() => { initPatientMap(); }, 100);
+                } else if (btn.dataset.tab === 'request') {
+                    setTimeout(() => { initIncidentMap(); }, 100);
+                }
+            });
+        });
+        
+        document.getElementById('vLogoutBtn').addEventListener('click', () => {
+            document.getElementById('logoutBtn').click();
+        });
+    
+
+// INJECTED COMPONENTS
+
+                let marker;
+        let currentLocation = { lat: 28.6139, lng: 77.2090 };
+        let locationMode = 'auto';
+        let selectedSeverity = 'MODERATE';
+        let incidents = [];
+
+        function updateClock() {
+            const now = new Date();
+            document.getElementById('navClock').textContent = now.toLocaleTimeString('en-US', {hour12: false});
+        }
+        setInterval(updateClock, 1000);
+        updateClock();
+
+        function initIncidentMap() {
+            console.log('Initializing Incident Map...');
+            const container = document.getElementById('incidentMap');
+            if (!container) { console.error('incidentMap container not found'); return; }
+            console.log('Container size:', container.offsetWidth, 'x', container.offsetHeight);
+
+            if (incMap) {
+                console.log('Incident map already exists, invalidating size');
+                incMap.invalidateSize();
+                return;
+            }
+            incMap = L.map('incidentMap', { zoomControl: false }).setView([28.6139, 77.2090], 12);
+            L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+                attribution: '© OpenStreetMap contributors © CARTO',
+                maxZoom: 19
+            }).addTo(incMap);
+
+            L.control.zoom({ position: 'bottomright' }).addTo(incMap);
+
+            marker = L.marker([currentLocation.lat, currentLocation.lng], {draggable: true}).addTo(incMap);
+
+            marker.on('dragend', function(e) {
+                const pos = e.target.getLatLng();
+                currentLocation = { lat: pos.lat, lng: pos.lng };
+                document.getElementById('latitude').value = pos.lat.toFixed(6);
+                document.getElementById('longitude').value = pos.lng.toFixed(6);
+            });
+
+            incMap.on('click', function(e) {
+                if (locationMode === 'manual') {
+                    marker.setLatLng(e.latlng);
+                    currentLocation = { lat: e.latlng.lat, lng: e.latlng.lng };
+                    document.getElementById('latitude').value = e.latlng.lat.toFixed(6);
+                    document.getElementById('longitude').value = e.latlng.lng.toFixed(6);
+                }
+            });
+
+            setTimeout(() => { incMap.invalidateSize(); }, 200);
+        }
+
+        function setLocationMode(mode) {
+            locationMode = mode;
+            document.getElementById('autoLocationBtn').classList.toggle('active', mode === 'auto');
+            document.getElementById('manualLocationBtn').classList.toggle('active', mode === 'manual');
+
+            if (mode === 'auto') {
+                map.getContainer().style.cursor = '';
+            } else {
+                map.getContainer().style.cursor = 'crosshair';
+            }
+        }
+
+        function detectLocation() {
+            if (navigator.geolocation) {
+                navigator.geolocation.getCurrentPosition(
+                    (position) => {
+                        currentLocation = {
+                            lat: position.coords.latitude,
+                            lng: position.coords.longitude
+                        };
+                        map.setView([currentLocation.lat, currentLocation.lng], 14);
+                        marker.setLatLng([currentLocation.lat, currentLocation.lng]);
+                        document.getElementById('latitude').value = currentLocation.lat.toFixed(6);
+                        document.getElementById('longitude').value = currentLocation.lng.toFixed(6);
+                        document.getElementById('locationText').textContent = `Location: ${currentLocation.lat.toFixed(4)}, ${currentLocation.lng.toFixed(4)}`;
+                        document.getElementById('locationIndicator').classList.add('active');
+                    },
+                    (error) => {
+                        console.error('Geolocation error:', error);
+                        document.getElementById('locationText').textContent = 'Location: Using default (Delhi)';
+                        document.getElementById('latitude').value = '28.6139';
+                        document.getElementById('longitude').value = '77.2090';
+                    }
+                );
+            } else {
+                document.getElementById('locationText').textContent = 'Geolocation not supported';
+            }
+        }
+
+        function triggerSOS() {
+            
+            document.getElementById('sosLocation').textContent = `${currentLocation.lat.toFixed(6)}, ${currentLocation.lng.toFixed(6)}`;
+            document.getElementById('sosModal').classList.add('active');
+        }
+
+        function cancelSOS() {
+            document.getElementById('sosModal').classList.remove('active');
+        }
+
+        function confirmSOS() {
+            document.getElementById('sosModal').classList.remove('active');
+            document.getElementById('emergencyType').value = 'MEDICAL';
+            document.getElementById('severity').value = 'CRITICAL';
+            document.getElementById('latitude').value = currentLocation.lat.toFixed(6);
+            document.getElementById('longitude').value = currentLocation.lng.toFixed(6);
+            alert('Emergency services dispatched! Ambulance en route.');
+        }
+
+        document.querySelectorAll('.severity-btn').forEach(btn => {
+            btn.addEventListener('click', function() {
+                document.querySelectorAll('.severity-btn').forEach(b => b.classList.remove('active'));
+                this.classList.add('active');
+                selectedSeverity = this.dataset.severity;
+            });
+        });
+
+        document.getElementById('incidentForm').addEventListener('submit', function(e) {
+            e.preventDefault();
+            const incident = {
+                type: document.getElementById('emergencyType').value,
+                severity: selectedSeverity,
+                lat: parseFloat(document.getElementById('latitude').value),
+                lng: parseFloat(document.getElementById('longitude').value),
+                location: document.getElementById('locationDesc').value,
+                description: document.getElementById('description').value,
+                status: 'REPORTED',
+                createdAt: new Date().toISOString()
+            };
+
+            fetch('/api/incidents', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(incident)
+            }).then(res => {
+                if (res.ok) {
+                    alert('Incident reported successfully!');
+                    this.reset();
+                    
+                }
+            }).catch(err => {
+                console.error('Error submitting incident:', err);
+                addIncidentToList(incident);
+                alert('Incident reported locally.');
+                this.reset();
+            });
+        });
+
+        function loadRecentIncidents() {
+            fetch('/api/incidents')
+                .then(res => res.json())
+                .then(data => {
+                    incidents = data.slice(-5).reverse();
+                    renderRecentIncidents();
+                    updateStats();
+                })
+                .catch(err => {
+                    console.error('Error loading incidents:', err);
+                    loadSampleIncidents();
+                });
+        }
+
+        function loadSampleIncidents() {
+            incidents = [
+                { id: 1, type: 'ACCIDENT', severity: 'HIGH', location: 'Ring Road, Sector 15', createdAt: new Date().toISOString() },
+                { id: 2, type: 'MEDICAL', severity: 'CRITICAL', location: 'Metro Station, Dwarka', createdAt: new Date(Date.now() - 300000).toISOString() },
+                { id: 3, type: 'FIRE', severity: 'MODERATE', location: 'Market Complex, Saket', createdAt: new Date(Date.now() - 600000).toISOString() }
+            ];
+            renderRecentIncidents();
+            updateStats();
+        }
+
+        function addIncidentToList(incident) {
+            incidents.unshift({
+                id: incidents.length + 1,
+                type: incident.type,
+                severity: incident.severity,
+                location: incident.location || 'Unknown',
+                createdAt: incident.createdAt
+            });
+            renderRecentIncidents();
+            updateStats();
+        }
+
+        function renderRecentIncidents() {
+            const list = document.getElementById('recentIncidentsList');
+            list.innerHTML = incidents.map(i => `
+                <div class="incident-item ${i.severity === 'HIGH' || i.severity === 'CRITICAL' ? 'high-priority' : 'medium-priority'}">
+                    <div class="incident-header">
+                        <span class="incident-type">${i.type}</span>
+                        <span class="incident-time">${formatTime(i.createdAt)}</span>
+                    </div>
+                    <div class="incident-location">${i.location}</div>
+                </div>
+            `).join('');
+        }
+
+        function formatTime(isoString) {
+            const date = new Date(isoString);
+            return date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+        }
+
+        function updateStats() {
+            document.getElementById('totalIncidents').textContent = incidents.length + 3;
+            document.getElementById('activeIncidents').textContent = Math.max(1, Math.floor(incidents.length / 2));
+            document.getElementById('pendingIncidents').textContent = Math.ceil(incidents.length / 3);
+        }
+
+        document.getElementById('vLogoutBtn').addEventListener('click', () => {
+            document.getElementById('logoutBtn').click();
+        });
+
+        
+        
+        
+    
+
+        let hospitalsData = [];
+        let selectedHospitalId = null;
+
+        function updateClock() {
+            const now = new Date();
+            document.getElementById('navClock').textContent = now.toLocaleTimeString('en-US', {hour12: false});
+        }
+        setInterval(updateClock, 1000);
+        updateClock();
+
+        function loadHospitals() {
+            fetch('/api/hospitals')
+                .then(res => res.json())
+                .then(data => {
+                    hospitalsData = data;
+                    renderHospitals(data);
+                    updateStats(data);
+                })
+                .catch(err => {
+                    console.error('Error loading hospitals:', err);
+                    loadSampleData();
+                });
+        }
+
+        function loadSampleData() {
+            hospitalsData = [
+                { id: 1, name: 'City General Hospital', address: '123 Main Street, Delhi', totalBeds: 200, availableBeds: 45, workloadPercentage: 78, specialties: 'Emergency, Cardiac, Neuro', waitTimeMinutes: 25, contactPhone: '+91-11-2345-6789', status: 'BUSY' },
+                { id: 2, name: 'Metro Medical Center', address: '456 Park Road, Delhi', totalBeds: 150, availableBeds: 12, workloadPercentage: 92, specialties: 'Trauma, Ortho, ICU', waitTimeMinutes: 45, contactPhone: '+91-11-3456-7890', status: 'FULL' },
+                { id: 3, name: 'Sunrise Health Institute', address: '789 Green Avenue, Gurgaon', totalBeds: 100, availableBeds: 67, workloadPercentage: 33, specialties: 'General, Pediatrics', waitTimeMinutes: 10, contactPhone: '+91-124-456-7890', status: 'OPEN' },
+                { id: 4, name: 'Life Care Hospital', address: '321 Lake View, Noida', totalBeds: 180, availableBeds: 89, workloadPercentage: 51, specialties: 'Cardiac, Surgery, Radiology', waitTimeMinutes: 15, contactPhone: '+91-120-567-8901', status: 'OPEN' },
+                { id: 5, name: 'Emergency Plus Hospital', address: '555 Ring Road, Delhi', totalBeds: 250, availableBeds: 8, workloadPercentage: 97, specialties: 'Emergency, Trauma, Burn Unit', waitTimeMinutes: 60, contactPhone: '+91-11-6789-0123', status: 'FULL' },
+                { id: 6, name: 'Wellness Tower', address: '888 Sector 62, Noida', totalBeds: 80, availableBeds: 55, workloadPercentage: 31, specialties: 'General, Maternity', waitTimeMinutes: 8, contactPhone: '+91-120-789-0123', status: 'OPEN' }
+            ];
+            renderHospitals(hospitalsData);
+            updateStats(hospitalsData);
+        }
+
+        function getWorkloadClass(percentage) {
+            if (percentage >= 90) return 'critical-load';
+            if (percentage >= 75) return 'high-load';
+            if (percentage >= 50) return 'medium-load';
+            return 'low-load';
+        }
+
+        function getWorkloadBarClass(percentage) {
+            if (percentage >= 90) return 'workload-critical';
+            if (percentage >= 75) return 'workload-high';
+            if (percentage >= 50) return 'workload-medium';
+            return 'workload-low';
+        }
+
+        function getStatusClass(status) {
+            if (status === 'FULL') return 'status-full';
+            if (status === 'BUSY') return 'status-busy';
+            return 'status-open';
+        }
+
+        function renderHospitals(data) {
+            const grid = document.getElementById('hospitalsGrid');
+            grid.innerHTML = data.map(h => `
+                <div class="hospital-card ${getWorkloadClass(h.workloadPercentage)}" onclick="showHospitalDetail(${h.id})">
+                    <div class="hospital-card-header">
+                        <div>
+                            <div class="hospital-name">${h.name}</div>
+                            <div class="hospital-address">${h.address || 'Address not available'}</div>
+                        </div>
+                        <span class="hospital-status-badge ${getStatusClass(h.status)}">${h.status}</span>
+                    </div>
+                    <div class="hospital-metrics">
+                        <div class="metric-box">
+                            <div class="metric-box-value">${h.totalBeds}</div>
+                            <div class="metric-box-label">Total Beds</div>
+                        </div>
+                        <div class="metric-box">
+                            <div class="metric-box-value" style="color: ${h.availableBeds < 20 ? '#ff4444' : '#00ff88'}">${h.availableBeds}</div>
+                            <div class="metric-box-label">Available</div>
+                        </div>
+                    </div>
+                    <div class="workload-bar-container">
+                        <div class="workload-bar-label">
+                            <span>Workload</span>
+                            <span>${h.workloadPercentage}%</span>
+                        </div>
+                        <div class="workload-bar">
+                            <div class="workload-bar-fill ${getWorkloadBarClass(h.workloadPercentage)}" style="width: ${h.workloadPercentage}%"></div>
+                        </div>
+                    </div>
+                    <div class="hospital-specialties">
+                        ${h.specialties.split(',').map(s => `<span class="specialty-tag">${s.trim()}</span>`).join('')}
+                    </div>
+                    <div class="hospital-card-footer">
+                        <span class="wait-time">⏱ Wait: ${h.waitTimeMinutes} min</span>
+                        <button class="contact-btn" onclick="event.stopPropagation(); callHospital('${h.contactPhone}')">📞 Call</button>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        function updateStats(data) {
+            const total = data.length;
+            const available = data.filter(h => h.status === 'OPEN').length;
+            const busy = data.filter(h => h.status === 'BUSY').length;
+            const full = data.filter(h => h.status === 'FULL').length;
+            const totalBeds = data.reduce((sum, h) => sum + h.availableBeds, 0);
+            const avgWorkload = Math.round(data.reduce((sum, h) => sum + h.workloadPercentage, 0) / total);
+
+            document.getElementById('statTotal').textContent = total;
+            document.getElementById('statAvailable').textContent = available;
+            document.getElementById('statBusy').textContent = busy;
+            document.getElementById('statFull').textContent = full;
+            document.getElementById('totalHospitals').textContent = total;
+            document.getElementById('availableBeds').textContent = totalBeds;
+            document.getElementById('avgWorkload').textContent = avgWorkload + '%';
+        }
+
+        function showHospitalDetail(id) {
+            const hospital = hospitalsData.find(h => h.id === id);
+            if (!hospital) return;
+
+            selectedHospitalId = id;
+            document.getElementById('modalTitle').textContent = hospital.name;
+            document.getElementById('modalBeds').textContent = hospital.totalBeds;
+            document.getElementById('modalAvailable').textContent = hospital.availableBeds;
+            document.getElementById('modalPatients').textContent = hospital.totalBeds - hospital.availableBeds;
+            document.getElementById('modalWorkloadBar').style.width = hospital.workloadPercentage + '%';
+            document.getElementById('modalWorkloadBar').className = 'workload-bar-fill ' + getWorkloadBarClass(hospital.workloadPercentage);
+            document.getElementById('modalSpecialties').innerHTML = hospital.specialties.split(',').map(s => `<span class="specialty-tag">${s.trim()}</span>`).join('');
+            document.getElementById('modalContact').textContent = 'Phone: ' + (hospital.contactPhone || 'N/A');
+            document.getElementById('modalAddress').textContent = 'Address: ' + (hospital.address || 'N/A');
+            document.getElementById('hospitalModal').classList.add('active');
+        }
+
+        function closeModal() {
+            document.getElementById('hospitalModal').classList.remove('active');
+        }
+
+        function callHospital(phone) {
+            alert('Calling ' + phone);
+        }
+
+        function assignToHospital() {
+            if (selectedHospitalId) {
+                alert('Opening dispatch panel for hospital ID: ' + selectedHospitalId);
+                closeModal();
+            }
+        }
+
+        document.querySelectorAll('.sort-btn').forEach(btn => {
+            btn.addEventListener('click', function() {
+                document.querySelectorAll('.sort-btn').forEach(b => b.classList.remove('active'));
+                this.classList.add('active');
+                const sortBy = this.dataset.sort;
+                const sorted = [...hospitalsData].sort((a, b) => {
+                    if (sortBy === 'workload') return b.workloadPercentage - a.workloadPercentage;
+                    if (sortBy === 'beds') return b.availableBeds - a.availableBeds;
+                    if (sortBy === 'name') return a.name.localeCompare(b.name);
+                    if (sortBy === 'wait') return a.waitTimeMinutes - b.waitTimeMinutes;
+                });
+                renderHospitals(sorted);
+            });
+        });
+
+        document.getElementById('hospitalModal').addEventListener('click', function(e) {
+            if (e.target === this) closeModal();
+        });
+
+        document.getElementById('vLogoutBtn').addEventListener('click', () => {
+            document.getElementById('logoutBtn').click();
+        });
+
+        
+    
+
+        let logs = [];
+        let selectedHospital = null;
+
+        function updateClock() {
+            const now = new Date();
+            document.getElementById('navClock').textContent = now.toLocaleTimeString('en-US', {hour12: false});
+        }
+        setInterval(updateClock, 1000);
+        updateClock();
+
+        document.getElementById('destinationHospital').addEventListener('change', function() {
+            const hospitalId = this.value;
+            const hospitalName = this.options[this.selectedIndex].text;
+            if (hospitalId) {
+                selectedHospital = { id: hospitalId, name: hospitalName };
+                document.getElementById('hospitalPreview').style.display = 'block';
+                document.getElementById('previewHospitalName').textContent = hospitalName;
+            } else {
+                document.getElementById('hospitalPreview').style.display = 'none';
+                selectedHospital = null;
+            }
+        });
+
+        function clearHospitalSelection() {
+            document.getElementById('destinationHospital').value = '';
+            document.getElementById('hospitalPreview').style.display = 'none';
+            selectedHospital = null;
+        }
+
+        document.getElementById('isAllergic').addEventListener('change', function() {
+            document.getElementById('allergiesGroup').style.display = this.checked ? 'block' : 'none';
+        });
+
+        document.getElementById('onMedication').addEventListener('change', function() {
+            document.getElementById('medicationsGroup').style.display = this.checked ? 'block' : 'none';
+        });
+
+        function checkVitals() {
+            const hr = parseInt(document.getElementById('heartRate').value);
+            const temp = parseFloat(document.getElementById('temperature').value);
+            const o2 = parseInt(document.getElementById('oxygen').value);
+
+            if (hr) {
+                const hrStatus = hr < 60 || hr > 100 ? (hr < 50 || hr > 120 ? 'critical' : 'warning') : 'normal';
+                document.getElementById('hrStatus').className = 'vital-status vital-' + hrStatus;
+                document.getElementById('hrStatus').textContent = hrStatus.charAt(0).toUpperCase() + hrStatus.slice(1);
+            }
+
+            if (temp) {
+                const tempStatus = temp < 97 || temp > 99 ? (temp < 95 || temp > 103 ? 'critical' : 'warning') : 'normal';
+                document.getElementById('tempStatus').className = 'vital-status vital-' + tempStatus;
+                document.getElementById('tempStatus').textContent = tempStatus.charAt(0).toUpperCase() + tempStatus.slice(1);
+            }
+
+            if (o2) {
+                const o2Status = o2 < 95 ? (o2 < 90 ? 'critical' : 'warning') : 'normal';
+                document.getElementById('o2Status').className = 'vital-status vital-' + o2Status;
+                document.getElementById('o2Status').textContent = o2Status.charAt(0).toUpperCase() + o2Status.slice(1);
+            }
+        }
+
+        ['heartRate', 'temperature', 'oxygen'].forEach(id => {
+            document.getElementById(id).addEventListener('input', checkVitals);
+        });
+
+        document.getElementById('patientForm').addEventListener('submit', function(e) {
+            e.preventDefault();
+            
+            const patientData = {
+                patientId: 'PAT-' + Date.now(),
+                patientName: document.getElementById('patientName').value,
+                patientAge: parseInt(document.getElementById('patientAge').value),
+                patientGender: document.getElementById('patientGender').value,
+                bloodType: document.getElementById('bloodType').value,
+                heartRate: document.getElementById('heartRate').value,
+                bloodPressure: document.getElementById('bloodPressure').value,
+                temperature: document.getElementById('temperature').value,
+                oxygen: document.getElementById('oxygen').value,
+                currentProblem: document.getElementById('currentProblem').value,
+                medicalHistory: document.getElementById('medicalHistory').value,
+                symptoms: document.getElementById('symptoms').value,
+                isAllergic: document.getElementById('isAllergic').checked,
+                allergies: document.getElementById('allergies').value,
+                onMedication: document.getElementById('onMedication').checked,
+                currentMedications: document.getElementById('currentMedications').value,
+                destinationHospital: selectedHospital,
+                timestamp: new Date().toISOString()
+            };
+
+            fetch('/api/analytics/patient', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(patientData)
+            }).then(res => {
+                addLogEntry(patientData);
+                
+                alert('Patient data submitted and shared with hospital!');
+                this.reset();
+                clearHospitalSelection();
+            }).catch(err => {
+                console.error('Error:', err);
+                addLogEntry(patientData);
+                
+                alert('Data saved locally. Will sync when online.');
+                this.reset();
+            });
+        });
+
+        function saveDraft() {
+            const draft = {
+                patientName: document.getElementById('patientName').value || 'Unnamed',
+                timestamp: new Date().toISOString()
+            };
+            addLogEntry({ ...draft, type: 'info', detail: 'Draft saved' });
+            alert('Draft saved!');
+        }
+
+        function addLogEntry(data) {
+            const log = {
+                id: logs.length + 1,
+                type: data.currentProblem ? 'emergency' : 'info',
+                patientName: data.patientName || 'Unknown Patient',
+                detail: data.currentProblem || 'Patient data updated',
+                vitals: {
+                    hr: data.heartRate || '-',
+                    bp: data.bloodPressure || '-',
+                    temp: data.temperature || '-',
+                    o2: data.oxygen || '-'
+                },
+                hospital: data.destinationHospital?.name || 'Not assigned',
+                time: data.timestamp || new Date().toISOString()
+            };
+            logs.unshift(log);
+            renderLogs();
+        }
+
+        function renderLogs(filter = 'all') {
+            const list = document.getElementById('logsList');
+            const filteredLogs = filter === 'all' ? logs : logs.filter(l => l.type === filter);
+            
+            list.innerHTML = filteredLogs.map(log => `
+                <div class="log-entry ${log.type}">
+                    <div class="log-header">
+                        <span class="log-type">${log.type.toUpperCase()}</span>
+                        <span class="log-time">${formatTime(log.time)}</span>
+                    </div>
+                    <div class="log-patient">👤 ${log.patientName}</div>
+                    <div class="log-details">${log.detail}</div>
+                    <div class="log-vitals">
+                        <span class="log-vital">❤️ <span>${log.vitals.hr}</span></span>
+                        <span class="log-vital">💉 <span>${log.vitals.bp}</span></span>
+                        <span class="log-vital">🌡️ <span>${log.vitals.temp}°F</span></span>
+                        <span class="log-vital">🫁 <span>${log.vitals.o2}%</span></span>
+                    </div>
+                    ${log.hospital !== 'Not assigned' ? `<div style="margin-top: 8px; font-family: 'Rajdhani', sans-serif; font-size: 11px; color: #00ff88;">📤 Shared with: ${log.hospital}</div>` : ''}
+                </div>
+            `).join('');
+        }
+
+        function formatTime(isoString) {
+            const date = new Date(isoString);
+            return date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+        }
+
+        document.querySelectorAll('.filter-tab').forEach(tab => {
+            tab.addEventListener('click', function() {
+                document.querySelectorAll('.filter-tab').forEach(t => t.classList.remove('active'));
+                this.classList.add('active');
+                renderLogs(this.dataset.filter);
+            });
+        });
+
+        function updateStats() {
+            document.getElementById('totalPatients').textContent = logs.length || 5;
+            document.getElementById('criticalCases').textContent = logs.filter(l => l.type === 'emergency').length || 2;
+            document.getElementById('sharedHospitals').textContent = logs.filter(l => l.hospital !== 'Not assigned').length || 3;
+        }
+
+        document.getElementById('vLogoutBtn').addEventListener('click', () => {
+            document.getElementById('logoutBtn').click();
+        });
+
+        
+        
+
+        function loadSampleLogs() {
+            logs = [
+                { id: 1, type: 'emergency', patientName: 'Rajesh Kumar', detail: 'Chest pain, difficulty breathing', vitals: { hr: '110', bp: '150/95', temp: '98.4', o2: '94' }, hospital: 'City General Hospital', time: new Date().toISOString() },
+                { id: 2, type: 'info', patientName: 'Priya Sharma', detail: 'Follow-up vitals check', vitals: { hr: '72', bp: '120/80', temp: '98.6', o2: '99' }, hospital: 'Metro Medical Center', time: new Date(Date.now() - 600000).toISOString() },
+                { id: 3, type: 'emergency', patientName: 'Amit Singh', detail: 'Road accident, head injury suspected', vitals: { hr: '95', bp: '100/70', temp: '97.8', o2: '96' }, hospital: 'Emergency Plus Hospital', time: new Date(Date.now() - 1200000).toISOString() }
+            ];
+            renderLogs();
+            
+        }
+    </script>
+<script>
+        setTimeout(() => {
+            if(document.getElementById('requestTab') && document.getElementById('requestTab').classList.contains('active')) {
+                if(typeof initIncidentMap === 'function') initIncidentMap();
+            }
+        }, 500);
+</script>
+</body>
+</html>

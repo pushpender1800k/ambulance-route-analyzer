@@ -18,7 +18,24 @@ public class DispatchController {
     }
 
     @PostMapping
-    public ResponseEntity<Dispatch> dispatch(@Valid @RequestBody DispatchRequest request) {
-        return ResponseEntity.ok(dispatchService.dispatch(request));
+    public ResponseEntity<?> dispatch(@Valid @RequestBody DispatchRequest request) {
+        try {
+            Dispatch response = dispatchService.dispatch(request);
+            return ResponseEntity.ok(response);
+        } catch (com.aris.exception.AlreadyAssignedException e) {
+            return ResponseEntity.status(org.springframework.http.HttpStatus.CONFLICT)
+                .body(java.util.Map.of(
+                    "error", "ALREADY_ASSIGNED",
+                    "message", e.getMessage(),
+                    "code", 409
+                ));
+        } catch (com.aris.exception.UnitNotAvailableException e) {
+            return ResponseEntity.status(org.springframework.http.HttpStatus.CONFLICT)
+                .body(java.util.Map.of(
+                    "error", "UNIT_NOT_AVAILABLE",
+                    "message", e.getMessage(),
+                    "code", 409
+                ));
+        }
     }
 }

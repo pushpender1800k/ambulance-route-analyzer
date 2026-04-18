@@ -1,0 +1,702 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RESQ — Hospitals</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;500;600;700;800;900&family=Rajdhani:wght@300;400;500;600;700&family=Share+Tech+Mono&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/css/dashboard.css">
+    <style>
+        .hospitals-container {
+            padding: 20px;
+            height: calc(100vh - 80px);
+            overflow-y: auto;
+        }
+        
+        .hospitals-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 24px;
+        }
+        
+        .hospitals-title {
+            font-family: 'Orbitron', sans-serif;
+            font-size: 24px;
+            color: #00f0ff;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+        }
+        
+        .hospitals-stats {
+            display: flex;
+            gap: 20px;
+        }
+        
+        .hospital-stat-card {
+            background: linear-gradient(135deg, rgba(0,240,255,0.1) 0%, rgba(0,0,0,0.3) 100%);
+            border: 1px solid rgba(0,240,255,0.3);
+            border-radius: 8px;
+            padding: 12px 20px;
+            text-align: center;
+        }
+        
+        .hospital-stat-value {
+            font-family: 'Orbitron', sans-serif;
+            font-size: 28px;
+            color: #00f0ff;
+        }
+        
+        .hospital-stat-label {
+            font-family: 'Rajdhani', sans-serif;
+            font-size: 12px;
+            color: #888;
+            text-transform: uppercase;
+        }
+        
+        .hospitals-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+            gap: 20px;
+        }
+        
+        .hospital-card {
+            background: linear-gradient(180deg, rgba(20,30,40,0.9) 0%, rgba(10,15,20,0.95) 100%);
+            border: 1px solid rgba(0,240,255,0.2);
+            border-radius: 12px;
+            padding: 20px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .hospital-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 3px;
+            background: linear-gradient(90deg, transparent, #00f0ff, transparent);
+            opacity: 0;
+            transition: opacity 0.3s ease;
+        }
+        
+        .hospital-card:hover {
+            border-color: #00f0ff;
+            transform: translateY(-4px);
+            box-shadow: 0 10px 40px rgba(0,240,255,0.2);
+        }
+        
+        .hospital-card:hover::before {
+            opacity: 1;
+        }
+        
+        .hospital-card.low-load { border-left: 4px solid #00ff88; }
+        .hospital-card.medium-load { border-left: 4px solid #ffaa00; }
+        .hospital-card.high-load { border-left: 4px solid #ff4444; }
+        .hospital-card.critical-load { border-left: 4px solid #ff0044; animation: criticalPulse 2s infinite; }
+        
+        @keyframes criticalPulse {
+            0%, 100% { box-shadow: 0 0 20px rgba(255,0,68,0.3); }
+            50% { box-shadow: 0 0 40px rgba(255,0,68,0.6); }
+        }
+        
+        .hospital-card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            margin-bottom: 16px;
+        }
+        
+        .hospital-name {
+            font-family: 'Orbitron', sans-serif;
+            font-size: 18px;
+            color: #fff;
+            margin-bottom: 4px;
+        }
+        
+        .hospital-address {
+            font-family: 'Rajdhani', sans-serif;
+            font-size: 13px;
+            color: #888;
+        }
+        
+        .hospital-status-badge {
+            padding: 4px 10px;
+            border-radius: 20px;
+            font-family: 'Rajdhani', sans-serif;
+            font-size: 11px;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+        
+        .status-open {
+            background: rgba(0,255,136,0.2);
+            color: #00ff88;
+            border: 1px solid rgba(0,255,136,0.3);
+        }
+        
+        .status-busy {
+            background: rgba(255,170,0,0.2);
+            color: #ffaa00;
+            border: 1px solid rgba(255,170,0,0.3);
+        }
+        
+        .status-full {
+            background: rgba(255,68,68,0.2);
+            color: #ff4444;
+            border: 1px solid rgba(255,68,68,0.3);
+        }
+        
+        .hospital-metrics {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 12px;
+            margin-bottom: 16px;
+        }
+        
+        .metric-box {
+            background: rgba(0,0,0,0.3);
+            border-radius: 8px;
+            padding: 12px;
+            text-align: center;
+        }
+        
+        .metric-box-value {
+            font-family: 'Orbitron', sans-serif;
+            font-size: 24px;
+            color: #00f0ff;
+        }
+        
+        .metric-box-label {
+            font-family: 'Rajdhani', sans-serif;
+            font-size: 11px;
+            color: #666;
+            text-transform: uppercase;
+            margin-top: 2px;
+        }
+        
+        .workload-bar-container {
+            margin-bottom: 16px;
+        }
+        
+        .workload-bar-label {
+            display: flex;
+            justify-content: space-between;
+            font-family: 'Rajdhani', sans-serif;
+            font-size: 12px;
+            color: #888;
+            margin-bottom: 6px;
+        }
+        
+        .workload-bar {
+            height: 8px;
+            background: rgba(255,255,255,0.1);
+            border-radius: 4px;
+            overflow: hidden;
+        }
+        
+        .workload-bar-fill {
+            height: 100%;
+            border-radius: 4px;
+            transition: width 0.5s ease, background 0.3s ease;
+        }
+        
+        .workload-low { background: linear-gradient(90deg, #00ff88, #00cc66); }
+        .workload-medium { background: linear-gradient(90deg, #ffaa00, #ff8800); }
+        .workload-high { background: linear-gradient(90deg, #ff6644, #ff4444); }
+        .workload-critical { background: linear-gradient(90deg, #ff0044, #cc0033); animation: barPulse 1s infinite; }
+        
+        @keyframes barPulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.6; }
+        }
+        
+        .hospital-specialties {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+        }
+        
+        .specialty-tag {
+            background: rgba(0,240,255,0.1);
+            border: 1px solid rgba(0,240,255,0.2);
+            border-radius: 4px;
+            padding: 4px 8px;
+            font-family: 'Rajdhani', sans-serif;
+            font-size: 11px;
+            color: #00f0ff;
+        }
+        
+        .hospital-card-footer {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-top: 16px;
+            padding-top: 12px;
+            border-top: 1px solid rgba(255,255,255,0.1);
+        }
+        
+        .wait-time {
+            font-family: 'Share Tech Mono', monospace;
+            font-size: 14px;
+            color: #ffaa00;
+        }
+        
+        .contact-btn {
+            background: rgba(0,240,255,0.2);
+            border: 1px solid rgba(0,240,255,0.3);
+            border-radius: 4px;
+            padding: 6px 12px;
+            color: #00f0ff;
+            font-family: 'Rajdhani', sans-serif;
+            font-size: 12px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+        
+        .contact-btn:hover {
+            background: rgba(0,240,255,0.3);
+        }
+        
+        .sort-controls {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+        
+        .sort-btn {
+            background: rgba(0,0,0,0.3);
+            border: 1px solid rgba(0,240,255,0.2);
+            border-radius: 4px;
+            padding: 8px 16px;
+            color: #888;
+            font-family: 'Rajdhani', sans-serif;
+            font-size: 13px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+        
+        .sort-btn:hover, .sort-btn.active {
+            background: rgba(0,240,255,0.1);
+            border-color: #00f0ff;
+            color: #00f0ff;
+        }
+        
+        .hospital-modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0,0,0,0.8);
+            z-index: 1000;
+            justify-content: center;
+            align-items: center;
+        }
+        
+        .hospital-modal.active {
+            display: flex;
+        }
+        
+        .modal-content {
+            background: linear-gradient(180deg, rgba(20,30,40,0.98) 0%, rgba(10,15,20,0.98) 100%);
+            border: 1px solid rgba(0,240,255,0.3);
+            border-radius: 16px;
+            padding: 30px;
+            max-width: 500px;
+            width: 90%;
+            max-height: 80vh;
+            overflow-y: auto;
+        }
+        
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 24px;
+        }
+        
+        .modal-title {
+            font-family: 'Orbitron', sans-serif;
+            font-size: 20px;
+            color: #00f0ff;
+        }
+        
+        .modal-close {
+            background: none;
+            border: none;
+            color: #888;
+            font-size: 24px;
+            cursor: pointer;
+        }
+        
+        .modal-close:hover { color: #fff; }
+        
+        .modal-stats {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 15px;
+            margin-bottom: 24px;
+        }
+        
+        .modal-stat {
+            background: rgba(0,0,0,0.3);
+            border-radius: 8px;
+            padding: 15px;
+            text-align: center;
+        }
+        
+        .modal-stat-value {
+            font-family: 'Orbitron', sans-serif;
+            font-size: 28px;
+            color: #00f0ff;
+        }
+        
+        .modal-stat-label {
+            font-family: 'Rajdhani', sans-serif;
+            font-size: 11px;
+            color: #666;
+            text-transform: uppercase;
+            margin-top: 4px;
+        }
+        
+        .modal-section {
+            margin-bottom: 20px;
+        }
+        
+        .modal-section-title {
+            font-family: 'Rajdhani', sans-serif;
+            font-size: 14px;
+            color: #00f0ff;
+            text-transform: uppercase;
+            margin-bottom: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div class="app-wrapper">
+        <!-- VERTICAL Sidebar Nav -->
+        <nav class="vertical-nav">
+            <div class="vnav-brand">
+                <div class="vbrand-icon">R</div>
+            </div>
+            <div class="vnav-items">
+                <a href="/dashboard" class="vnav-btn" title="Command Map">
+                    <span class="vnav-icon">🗺️</span>
+                </a>
+                <a href="/units" class="vnav-btn" title="Units">
+                    <span class="vnav-icon">🚑</span>
+                </a>
+                <a href="/hospitals" class="vnav-btn active" title="Hospitals">
+                    <span class="vnav-icon">🏥</span>
+                </a>
+                <a href="/incidents" class="vnav-btn" title="Incidents">
+                    <span class="vnav-icon">🔴</span>
+                </a>
+                <a href="/analytics" class="vnav-btn" title="Analytics">
+                    <span class="vnav-icon">📊</span>
+                </a>
+                <a href="/settings" class="vnav-btn" title="Settings">
+                    <span class="vnav-icon">⚙️</span>
+                </a>
+            </div>
+            <div class="vnav-bottom">
+                <button class="vnav-btn logout-vbtn" id="vLogoutBtn" title="Logout">
+                    <span class="vnav-icon">⏻</span>
+                </button>
+            </div>
+        </nav>
+
+        <div class="main-content">
+            <!-- TOP NAVIGATION BAR -->
+            <nav class="top-nav">
+                <div class="nav-left">
+                    <div class="nav-brand">
+                        <div class="brand-icon">R</div>
+                        <span class="brand-name">RESQ</span>
+                    </div>
+                    <div class="nav-divider"></div>
+                    <span class="nav-subtitle">HOSPITAL NETWORK</span>
+                </div>
+                <div class="nav-center">
+                    <div class="nav-stat">
+                        <span class="ns-value" id="totalHospitals">0</span>
+                        <span class="ns-label">TOTAL</span>
+                    </div>
+                    <div class="nav-stat">
+                        <span class="ns-value" id="availableBeds">0</span>
+                        <span class="ns-label">BEDS</span>
+                    </div>
+                    <div class="nav-stat">
+                        <span class="ns-value" id="avgWorkload">0%</span>
+                        <span class="ns-label">AVG LOAD</span>
+                    </div>
+                </div>
+                <div class="nav-right">
+                    <div class="nav-clock" id="navClock">00:00:00</div>
+                    <div class="nav-user">
+                        <span class="user-role">ADMIN</span>
+                        <span class="user-name" id="userName">admin</span>
+                    </div>
+                    <div class="nav-avatar">A</div>
+                    <button class="logout-btn" id="logoutBtn">⏻ LOGOUT</button>
+                </div>
+            </nav>
+
+            <div class="hospitals-container">
+                <div class="hospitals-header">
+                    <h1 class="hospitals-title">Hospital Network Status</h1>
+                    <div class="hospitals-stats">
+                        <div class="hospital-stat-card">
+                            <div class="hospital-stat-value" id="statTotal">0</div>
+                            <div class="hospital-stat-label">Total Hospitals</div>
+                        </div>
+                        <div class="hospital-stat-card">
+                            <div class="hospital-stat-value" id="statAvailable">0</div>
+                            <div class="hospital-stat-label">Available</div>
+                        </div>
+                        <div class="hospital-stat-card">
+                            <div class="hospital-stat-value" id="statBusy">0</div>
+                            <div class="hospital-stat-label">Busy</div>
+                        </div>
+                        <div class="hospital-stat-card">
+                            <div class="hospital-stat-value" id="statFull">0</div>
+                            <div class="hospital-stat-label">At Capacity</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="sort-controls">
+                    <button class="sort-btn active" data-sort="workload">BY WORKLOAD</button>
+                    <button class="sort-btn" data-sort="beds">BY BEDS</button>
+                    <button class="sort-btn" data-sort="name">BY NAME</button>
+                    <button class="sort-btn" data-sort="wait">BY WAIT TIME</button>
+                </div>
+
+                <div class="hospitals-grid" id="hospitalsGrid"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Hospital Detail Modal -->
+    <div class="hospital-modal" id="hospitalModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 class="modal-title" id="modalTitle">Hospital Name</h2>
+                <button class="modal-close" onclick="closeModal()">&times;</button>
+            </div>
+            <div class="modal-stats">
+                <div class="modal-stat">
+                    <div class="modal-stat-value" id="modalBeds">0</div>
+                    <div class="modal-stat-label">Total Beds</div>
+                </div>
+                <div class="modal-stat">
+                    <div class="modal-stat-value" id="modalAvailable">0</div>
+                    <div class="modal-stat-label">Available</div>
+                </div>
+                <div class="modal-stat">
+                    <div class="modal-stat-value" id="modalPatients">0</div>
+                    <div class="modal-stat-label">Current</div>
+                </div>
+            </div>
+            <div class="modal-section">
+                <div class="modal-section-title">Workload</div>
+                <div class="workload-bar-container">
+                    <div class="workload-bar">
+                        <div class="workload-bar-fill" id="modalWorkloadBar" style="width: 50%;"></div>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-section">
+                <div class="modal-section-title">Specialties</div>
+                <div class="hospital-specialties" id="modalSpecialties"></div>
+            </div>
+            <div class="modal-section">
+                <div class="modal-section-title">Contact</div>
+                <p style="color: #888; font-family: 'Rajdhani', sans-serif;" id="modalContact">Phone: N/A</p>
+                <p style="color: #888; font-family: 'Rajdhani', sans-serif;" id="modalAddress">Address: N/A</p>
+            </div>
+            <button class="contact-btn" style="width: 100%; margin-top: 20px;" onclick="assignToHospital()">📍 ROUTE AMBULANCE HERE</button>
+        </div>
+    </div>
+
+    <script>
+        let hospitalsData = [];
+        let selectedHospitalId = null;
+
+        function updateClock() {
+            const now = new Date();
+            document.getElementById('navClock').textContent = now.toLocaleTimeString('en-US', {hour12: false});
+        }
+        setInterval(updateClock, 1000);
+        updateClock();
+
+        function loadHospitals() {
+            fetch('/api/hospitals')
+                .then(res => res.json())
+                .then(data => {
+                    hospitalsData = data;
+                    renderHospitals(data);
+                    updateStats(data);
+                })
+                .catch(err => {
+                    console.error('Error loading hospitals:', err);
+                    loadSampleData();
+                });
+        }
+
+        function loadSampleData() {
+            hospitalsData = [
+                { id: 1, name: 'City General Hospital', address: '123 Main Street, Delhi', totalBeds: 200, availableBeds: 45, workloadPercentage: 78, specialties: 'Emergency, Cardiac, Neuro', waitTimeMinutes: 25, contactPhone: '+91-11-2345-6789', status: 'BUSY' },
+                { id: 2, name: 'Metro Medical Center', address: '456 Park Road, Delhi', totalBeds: 150, availableBeds: 12, workloadPercentage: 92, specialties: 'Trauma, Ortho, ICU', waitTimeMinutes: 45, contactPhone: '+91-11-3456-7890', status: 'FULL' },
+                { id: 3, name: 'Sunrise Health Institute', address: '789 Green Avenue, Gurgaon', totalBeds: 100, availableBeds: 67, workloadPercentage: 33, specialties: 'General, Pediatrics', waitTimeMinutes: 10, contactPhone: '+91-124-456-7890', status: 'OPEN' },
+                { id: 4, name: 'Life Care Hospital', address: '321 Lake View, Noida', totalBeds: 180, availableBeds: 89, workloadPercentage: 51, specialties: 'Cardiac, Surgery, Radiology', waitTimeMinutes: 15, contactPhone: '+91-120-567-8901', status: 'OPEN' },
+                { id: 5, name: 'Emergency Plus Hospital', address: '555 Ring Road, Delhi', totalBeds: 250, availableBeds: 8, workloadPercentage: 97, specialties: 'Emergency, Trauma, Burn Unit', waitTimeMinutes: 60, contactPhone: '+91-11-6789-0123', status: 'FULL' },
+                { id: 6, name: 'Wellness Tower', address: '888 Sector 62, Noida', totalBeds: 80, availableBeds: 55, workloadPercentage: 31, specialties: 'General, Maternity', waitTimeMinutes: 8, contactPhone: '+91-120-789-0123', status: 'OPEN' }
+            ];
+            renderHospitals(hospitalsData);
+            updateStats(hospitalsData);
+        }
+
+        function getWorkloadClass(percentage) {
+            if (percentage >= 90) return 'critical-load';
+            if (percentage >= 75) return 'high-load';
+            if (percentage >= 50) return 'medium-load';
+            return 'low-load';
+        }
+
+        function getWorkloadBarClass(percentage) {
+            if (percentage >= 90) return 'workload-critical';
+            if (percentage >= 75) return 'workload-high';
+            if (percentage >= 50) return 'workload-medium';
+            return 'workload-low';
+        }
+
+        function getStatusClass(status) {
+            if (status === 'FULL') return 'status-full';
+            if (status === 'BUSY') return 'status-busy';
+            return 'status-open';
+        }
+
+        function renderHospitals(data) {
+            const grid = document.getElementById('hospitalsGrid');
+            grid.innerHTML = data.map(h => `
+                <div class="hospital-card ${getWorkloadClass(h.workloadPercentage)}" onclick="showHospitalDetail(${h.id})">
+                    <div class="hospital-card-header">
+                        <div>
+                            <div class="hospital-name">${h.name}</div>
+                            <div class="hospital-address">${h.address || 'Address not available'}</div>
+                        </div>
+                        <span class="hospital-status-badge ${getStatusClass(h.status)}">${h.status}</span>
+                    </div>
+                    <div class="hospital-metrics">
+                        <div class="metric-box">
+                            <div class="metric-box-value">${h.totalBeds}</div>
+                            <div class="metric-box-label">Total Beds</div>
+                        </div>
+                        <div class="metric-box">
+                            <div class="metric-box-value" style="color: ${h.availableBeds < 20 ? '#ff4444' : '#00ff88'}">${h.availableBeds}</div>
+                            <div class="metric-box-label">Available</div>
+                        </div>
+                    </div>
+                    <div class="workload-bar-container">
+                        <div class="workload-bar-label">
+                            <span>Workload</span>
+                            <span>${h.workloadPercentage}%</span>
+                        </div>
+                        <div class="workload-bar">
+                            <div class="workload-bar-fill ${getWorkloadBarClass(h.workloadPercentage)}" style="width: ${h.workloadPercentage}%"></div>
+                        </div>
+                    </div>
+                    <div class="hospital-specialties">
+                        ${h.specialties.split(',').map(s => `<span class="specialty-tag">${s.trim()}</span>`).join('')}
+                    </div>
+                    <div class="hospital-card-footer">
+                        <span class="wait-time">⏱ Wait: ${h.waitTimeMinutes} min</span>
+                        <button class="contact-btn" onclick="event.stopPropagation(); callHospital('${h.contactPhone}')">📞 Call</button>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        function updateStats(data) {
+            const total = data.length;
+            const available = data.filter(h => h.status === 'OPEN').length;
+            const busy = data.filter(h => h.status === 'BUSY').length;
+            const full = data.filter(h => h.status === 'FULL').length;
+            const totalBeds = data.reduce((sum, h) => sum + h.availableBeds, 0);
+            const avgWorkload = Math.round(data.reduce((sum, h) => sum + h.workloadPercentage, 0) / total);
+
+            document.getElementById('statTotal').textContent = total;
+            document.getElementById('statAvailable').textContent = available;
+            document.getElementById('statBusy').textContent = busy;
+            document.getElementById('statFull').textContent = full;
+            document.getElementById('totalHospitals').textContent = total;
+            document.getElementById('availableBeds').textContent = totalBeds;
+            document.getElementById('avgWorkload').textContent = avgWorkload + '%';
+        }
+
+        function showHospitalDetail(id) {
+            const hospital = hospitalsData.find(h => h.id === id);
+            if (!hospital) return;
+
+            selectedHospitalId = id;
+            document.getElementById('modalTitle').textContent = hospital.name;
+            document.getElementById('modalBeds').textContent = hospital.totalBeds;
+            document.getElementById('modalAvailable').textContent = hospital.availableBeds;
+            document.getElementById('modalPatients').textContent = hospital.totalBeds - hospital.availableBeds;
+            document.getElementById('modalWorkloadBar').style.width = hospital.workloadPercentage + '%';
+            document.getElementById('modalWorkloadBar').className = 'workload-bar-fill ' + getWorkloadBarClass(hospital.workloadPercentage);
+            document.getElementById('modalSpecialties').innerHTML = hospital.specialties.split(',').map(s => `<span class="specialty-tag">${s.trim()}</span>`).join('');
+            document.getElementById('modalContact').textContent = 'Phone: ' + (hospital.contactPhone || 'N/A');
+            document.getElementById('modalAddress').textContent = 'Address: ' + (hospital.address || 'N/A');
+            document.getElementById('hospitalModal').classList.add('active');
+        }
+
+        function closeModal() {
+            document.getElementById('hospitalModal').classList.remove('active');
+        }
+
+        function callHospital(phone) {
+            alert('Calling ' + phone);
+        }
+
+        function assignToHospital() {
+            if (selectedHospitalId) {
+                alert('Opening dispatch panel for hospital ID: ' + selectedHospitalId);
+                closeModal();
+            }
+        }
+
+        document.querySelectorAll('.sort-btn').forEach(btn => {
+            btn.addEventListener('click', function() {
+                document.querySelectorAll('.sort-btn').forEach(b => b.classList.remove('active'));
+                this.classList.add('active');
+                const sortBy = this.dataset.sort;
+                const sorted = [...hospitalsData].sort((a, b) => {
+                    if (sortBy === 'workload') return b.workloadPercentage - a.workloadPercentage;
+                    if (sortBy === 'beds') return b.availableBeds - a.availableBeds;
+                    if (sortBy === 'name') return a.name.localeCompare(b.name);
+                    if (sortBy === 'wait') return a.waitTimeMinutes - b.waitTimeMinutes;
+                });
+                renderHospitals(sorted);
+            });
+        });
+
+        document.getElementById('hospitalModal').addEventListener('click', function(e) {
+            if (e.target === this) closeModal();
+        });
+
+        document.getElementById('vLogoutBtn').addEventListener('click', () => {
+            document.getElementById('logoutBtn').click();
+        });
+
+        loadHospitals();
+    </script>
+</body>
+</html>

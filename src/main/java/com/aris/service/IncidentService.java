@@ -2,6 +2,7 @@ package com.aris.service;
 
 import com.aris.dto.IncidentRequest;
 import com.aris.model.Incident;
+import com.aris.model.IncidentStatus;
 import com.aris.repository.IncidentRepository;
 import com.aris.websocket.EventBroadcaster;
 import org.springframework.stereotype.Service;
@@ -20,11 +21,12 @@ public class IncidentService {
     }
 
     public List<Incident> getAllActive() {
-        // Only show incidents waiting for pickup (red dots).
-        // IN_TRANSPORT = patient picked up → remove red marker from map.
         List<Incident> active = new java.util.ArrayList<>();
-        active.addAll(incidentRepository.findByStatus("NEW"));
-        active.addAll(incidentRepository.findByStatus("ACTIVE"));
+        active.addAll(incidentRepository.findByStatus(IncidentStatus.UNASSIGNED));
+        active.addAll(incidentRepository.findByStatus(IncidentStatus.ASSIGNED));
+        active.addAll(incidentRepository.findByStatus(IncidentStatus.EN_ROUTE_PATIENT));
+        active.addAll(incidentRepository.findByStatus(IncidentStatus.PICKED_UP));
+        active.addAll(incidentRepository.findByStatus(IncidentStatus.EN_ROUTE_HOSPITAL));
         return active;
     }
 
@@ -33,12 +35,12 @@ public class IncidentService {
     }
 
     public Incident create(IncidentRequest request) {
-        Incident incident = new Incident(
-                request.getPatientId(),
-                request.getCondition(),
-                request.getLat(),
-                request.getLng()
-        );
+        Incident incident = new Incident();
+        incident.setPatientUserId(request.getPatientId() != null ? Long.parseLong(request.getPatientId()) : null);
+        incident.setCondition(request.getCondition());
+        incident.setLat(request.getLat());
+        incident.setLng(request.getLng());
+        incident.setStatus(IncidentStatus.PENDING);
         incident = incidentRepository.save(incident);
 
         eventBroadcaster.broadcast("SYSTEM",
@@ -50,8 +52,12 @@ public class IncidentService {
     }
 
     public long countActive() {
-        return incidentRepository.countByStatus("NEW")
-                + incidentRepository.countByStatus("ACTIVE")
-                + incidentRepository.countByStatus("IN_TRANSPORT");
+        return incidentRepository.countByStatus(IncidentStatus.PENDING)
+                + incidentRepository.countByStatus(IncidentStatus.UNASSIGNED)
+                + incidentRepository.countByStatus(IncidentStatus.ASSIGNED)
+                + incidentRepository.countByStatus(IncidentStatus.EN_ROUTE_PATIENT)
+                + incidentRepository.countByStatus(IncidentStatus.PICKED_UP)
+                + incidentRepository.countByStatus(IncidentStatus.EN_ROUTE_HOSPITAL)
+                + incidentRepository.countByStatus(IncidentStatus.ARRIVED_HOSPITAL);
     }
 }

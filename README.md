@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # ARIS — Emergency Ambulance Routing Intelligence System
 
 ![Java](https://img.shields.io/badge/Java-17-007396?style=flat-square)
@@ -95,3 +96,27 @@ src/main/java/com/aris/
 ├── websocket/     EventBroadcaster
 └── exception/     GlobalExceptionHandler
 ```
+=======
+# 🚑 Ambulance Route Analyzer
+
+## 📌 Overview
+This project helps in finding the fastest route for ambulances using optimization algorithms.
+
+## ⚙️ Features
+- Shortest path calculation
+- Traffic-aware routing (if added)
+- Efficient emergency response system
+
+## 🛠️ Tech Stack
+- Python / Java / JS (edit this)
+- Dijkstra Algorithm / A* (edit based on your code)
+
+## 🚀 How to Run
+1. Clone the repo
+2. Run the main file
+
+## 📈 Future Improvements
+- Real-time traffic integration
+- Map visualization
+- AI-based prediction
+>>>>>>> 380cb2bf49124c21d9b1da0f50d1acecc43dc47e

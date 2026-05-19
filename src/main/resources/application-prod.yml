@@ -1,5 +1,5 @@
 # ═══════════════════════════════════════════════
-# RESQ — Production Configuration (Railway-optimized)
+# RESQ — Production Configuration (Render-optimized)
 # ═══════════════════════════════════════════════
 
 server:
@@ -21,15 +21,20 @@ spring:
       maximum-pool-size: 5
       minimum-idle: 2
       connection-timeout: 30000
+      idle-timeout: 600000
+      max-lifetime: 1800000
   jpa:
     hibernate:
-      ddl-auto: update
+      ddl-auto: none
     show-sql: false
     properties:
       hibernate:
         dialect: org.hibernate.dialect.PostgreSQLDialect
   flyway:
     enabled: true
+    baseline-on-migrate: true
+    baseline-version: 0
+    locations: classpath:db/migration
   thymeleaf:
     cache: true
     prefix: classpath:/templates/
@@ -51,6 +56,7 @@ logging:
   level:
     root: WARN
     com.aris: INFO
+    org.flywaydb: INFO
 
 management:
   endpoints:

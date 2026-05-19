@@ -1,0 +1,49 @@
+# ═══════════════════════════════════════════════════
+# RESQ — Render Blueprint (render.yaml)
+# Deploys: Spring Boot App + PostgreSQL 15
+# ═══════════════════════════════════════════════════
+
+services:
+  # ── Web Service (Spring Boot via Docker) ──
+  - type: web
+    name: resq-app
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    plan: free
+    region: oregon
+    envVars:
+      - key: PGHOST
+        fromDatabase:
+          name: resq-db
+          property: host
+      - key: PGPORT
+        fromDatabase:
+          name: resq-db
+          property: port
+      - key: PGDATABASE
+        fromDatabase:
+          name: resq-db
+          property: database
+      - key: PGUSER
+        fromDatabase:
+          name: resq-db
+          property: user
+      - key: PGPASSWORD
+        fromDatabase:
+          name: resq-db
+          property: password
+      - key: JWT_SECRET
+        generateValue: true
+      - key: SPRING_PROFILES_ACTIVE
+        value: prod
+      - key: OSRM_BASE_URL
+        value: https://router.project-osrm.org
+      - key: NOMINATIM_BASE_URL
+        value: https://nominatim.openstreetmap.org
+
+databases:
+  # ── PostgreSQL 15 Database ──
+  - name: resq-db
+    plan: free
+    databaseName: resq_db
+    user: resq_user

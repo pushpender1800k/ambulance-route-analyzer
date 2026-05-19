@@ -66,13 +66,12 @@ CREATE INDEX IF NOT EXISTS idx_dispatches_incident ON dispatches(incident_id);
 CREATE INDEX IF NOT EXISTS idx_event_logs_timestamp ON event_logs(timestamp);
 CREATE INDEX IF NOT EXISTS idx_hospitals_status ON hospitals(status);
 
--- Seed Data (PostgreSQL-compatible upsert)
+-- Seed Data
 INSERT INTO users (username, password_hash, role) VALUES
     ('admin', '$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy', 'COMMAND'),
     ('dispatcher', '$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy', 'DISPATCHER'),
     ('coordinator', '$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy', 'COORDINATOR'),
-    ('supervisor', '$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy', 'SUPERVISOR')
-ON CONFLICT (username) DO NOTHING;
+    ('supervisor', '$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy', 'SUPERVISOR');
 
 INSERT INTO hospitals (name, lat, lng, total_beds, available_beds, specialties, status) VALUES
     ('AIIMS Delhi', 28.5672, 77.2100, 120, 35, 'Trauma,Cardiology,Neurology,Burns', 'OPEN'),
@@ -81,16 +80,14 @@ INSERT INTO hospitals (name, lat, lng, total_beds, available_beds, specialties, 
     ('Max Super Speciality Saket', 28.5275, 77.2157, 90, 18, 'Cardiology,Oncology,Neurology', 'OPEN'),
     ('Fortis Escorts Heart Institute', 28.5505, 77.2225, 70, 15, 'Cardiology,Cardiac Surgery', 'OPEN'),
     ('Apollo Hospital Mathura Road', 28.5395, 77.2835, 85, 20, 'Multi-Specialty,Trauma,Burns', 'OPEN'),
-    ('Ram Manohar Lohia Hospital', 28.6274, 77.2080, 95, 25, 'Emergency,Trauma,General Surgery', 'OPEN')
-ON CONFLICT (name) DO NOTHING;
+    ('Ram Manohar Lohia Hospital', 28.6274, 77.2080, 95, 25, 'Emergency,Trauma,General Surgery', 'OPEN');
 
 INSERT INTO ambulances (unit_code, lat, lng, status) VALUES
     ('RESQ-001', 28.6100, 77.2300, 'STANDBY'),
     ('RESQ-002', 28.5500, 77.1900, 'STANDBY'),
     ('RESQ-003', 28.5800, 77.2500, 'STANDBY'),
     ('RESQ-004', 28.5200, 77.2100, 'STANDBY'),
-    ('HELI-001', 28.5560, 77.1000, 'STANDBY')
-ON CONFLICT (unit_code) DO NOTHING;
+    ('HELI-001', 28.5560, 77.1000, 'STANDBY');
 
 INSERT INTO event_logs (source, message, type) VALUES
-    ('SYSTEM', 'RESQ system initialized - all units operational', 'INFO');
+    ('SYSTEM', 'RESQ system initialized - all units operational', 'INFO');

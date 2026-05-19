@@ -1,5 +1,5 @@
 <<<<<<< HEAD
-# ARIS — Emergency Ambulance Routing Intelligence System
+# RESQ — Emergency Ambulance Routing Intelligence System
 
 ![Java](https://img.shields.io/badge/Java-17-007396?style=flat-square)
 ![Spring Boot](https://img.shields.io/badge/Spring%20Boot-3.2-brightgreen?style=flat-square)
